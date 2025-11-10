@@ -32,12 +32,7 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-<<<<<<< HEAD
   },
   "homepage": "."
-=======
-  }
-  
-
->>>>>>> 74e70f3c (Add frontend build setup)
 }
+
