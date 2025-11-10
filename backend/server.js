@@ -243,7 +243,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN || 'https://group-assignment-2-ypxs.onrender.com',
   credentials: true
 }));
 app.use(express.json({ limit: process.env.MAX_FILE_SIZE || '10mb' }));
