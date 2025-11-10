@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -10,64 +9,93 @@ require('dotenv').config();
 console.log('🔧 Loading environment variables...');
 console.log('Project ID:', process.env.FIREBASE_PROJECT_ID ? '✅ Found' : '❌ Missing');
 console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL ? '✅ Found' : '❌ Missing');
-console.log('Private Key:', process.env.FIREBASE_PRIVATE_KEY ? '✅ Found' : '❌ Missing');
+console.log('Private Key:', process.env.FIREBASE_PRIVATE_KEY ? '✅ Found (length: ' + process.env.FIREBASE_PRIVATE_KEY.length + ')' : '❌ Missing');
 
 // Initialize Firebase Admin
 let db;
 let useMockDB = false;
 
+// Enhanced environment variable parsing for Render
+const getFirebaseConfig = () => {
+  // Try multiple ways to get the private key
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  
+  if (!privateKey) {
+    console.log('❌ No private key found in environment variables');
+    return null;
+  }
+
+  // Handle different formats of private key
+  if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+    privateKey = privateKey.slice(1, -1);
+  }
+  
+  // Replace escaped newlines with actual newlines
+  privateKey = privateKey.replace(/\\n/g, '\n');
+  
+  // Ensure it has proper BEGIN/END markers
+  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
+  }
+
+  return {
+    type: "service_account",
+    project_id: process.env.FIREBASE_PROJECT_ID,
+    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+    private_key: privateKey,
+    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+    client_id: process.env.FIREBASE_CLIENT_ID,
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL || `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.FIREBASE_CLIENT_EMAIL)}`,
+    universe_domain: "googleapis.com"
+  };
+};
+
 try {
-  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_PRIVATE_KEY) {
-    console.log('⚠️  Firebase credentials not found, using mock database for development');
+  const firebaseConfig = getFirebaseConfig();
+  
+  if (!firebaseConfig || !process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL) {
+    console.log('⚠️  Firebase credentials incomplete, using mock database for development');
     useMockDB = true;
   } else {
-    // Clean up the private key
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1);
-    }
-    privateKey = privateKey.replace(/\\n/g, '\n');
-
-    // Use the environment variables directly for service account
-    const serviceAccount = {
-      type: "service_account",
-      project_id: process.env.FIREBASE_PROJECT_ID,
-      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-      private_key: privateKey,
-      client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      client_id: process.env.FIREBASE_CLIENT_ID,
-      auth_uri: "https://accounts.google.com/o/oauth2/auth",
-      token_uri: "https://oauth2.googleapis.com/token",
-      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.FIREBASE_CLIENT_EMAIL)}`,
-      universe_domain: "googleapis.com"
-    };
-
-    console.log('🚀 Initializing Firebase Admin...');
+    console.log('🚀 Initializing Firebase Admin with provided credentials...');
     console.log('📁 Project:', process.env.FIREBASE_PROJECT_ID);
     console.log('📧 Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
 
-    // Initialize Firebase only if not already initialized
-    if (admin.apps.length === 0) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
-      });
+    try {
+      // Initialize Firebase only if not already initialized
+      if (admin.apps.length === 0) {
+        admin.initializeApp({
+          credential: admin.credential.cert(firebaseConfig),
+          databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
+        });
+      }
+
+      db = admin.firestore();
+
+      // Configure Firestore settings to handle undefined values
+      db.settings({ ignoreUndefinedProperties: true });
+
+      // Test the connection
+      const testRef = db.collection('test_connection').doc('test');
+      await testRef.set({ test: true, timestamp: new Date() });
+      await testRef.delete();
+
+      console.log('✅ Firebase initialized successfully');
+    } catch (firebaseError) {
+      console.log('❌ Firebase initialization failed:', firebaseError.message);
+      console.log('Error details:', firebaseError);
+      useMockDB = true;
     }
-
-    db = admin.firestore();
-
-    // Configure Firestore settings to handle undefined values
-    db.settings({ ignoreUndefinedProperties: true });
-
-    console.log('✅ Firebase initialized successfully');
   }
 } catch (error) {
-  console.log('⚠️  Firebase initialization failed, using mock database:', error.message);
+  console.log('⚠️  Firebase setup failed, using mock database:', error.message);
   useMockDB = true;
 }
 
-// Initialize mock database if Firebase failed
+// Initialize mock database if Firebase failed or not configured
 if (useMockDB) {
   console.log('🔄 Initializing mock database with sample data...');
 
@@ -143,17 +171,24 @@ if (useMockDB) {
     notifications: [],
     transcripts: [],
     certificates: [],
-    faculties: []
+    faculties: [],
+    company_profile: []
   };
 
+  // Enhanced mock database with better methods
   db = {
     collection: (name) => {
-      const data = mockData[name] || [];
+      if (!mockData[name]) {
+        mockData[name] = [];
+      }
+      const data = mockData[name];
+      
       return {
         where: (field, operator, value) => {
           const filtered = data.filter(item => {
             if (operator === '==') return item[field] === value;
             if (operator === 'in') return Array.isArray(value) ? value.includes(item[field]) : false;
+            if (operator === 'array-contains') return Array.isArray(item[field]) ? item[field].includes(value) : false;
             return true;
           });
           return {
@@ -161,16 +196,18 @@ if (useMockDB) {
               empty: filtered.length === 0,
               docs: filtered.map(item => ({
                 id: item.id,
-                data: () => item
+                data: () => item,
+                exists: true
               })),
               size: filtered.length
             })
           };
         },
         add: async (data) => {
-          const id = `mock_${Date.now().toString()}`;
+          const id = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           const cleanData = removeUndefinedValues(data);
-          mockData[name].push({ id, ...cleanData });
+          const newItem = { id, ...cleanData, createdAt: new Date() };
+          data.push(newItem);
           return { id };
         },
         doc: (id) => ({
@@ -182,15 +219,34 @@ if (useMockDB) {
             };
           },
           update: async (updateData) => {
-            const item = data.find(d => d.id === id);
-            if (item) Object.assign(item, removeUndefinedValues(updateData));
+            const itemIndex = data.findIndex(d => d.id === id);
+            if (itemIndex !== -1) {
+              const cleanData = removeUndefinedValues(updateData);
+              data[itemIndex] = { ...data[itemIndex], ...cleanData, updatedAt: new Date() };
+            }
             return { id };
           },
-          set: async (setData) => {
-            const item = data.find(d => d.id === id);
+          set: async (setData, options = {}) => {
+            const itemIndex = data.findIndex(d => d.id === id);
             const cleanData = removeUndefinedValues(setData);
-            if (item) Object.assign(item, cleanData);
-            else data.push({ id, ...cleanData });
+            const newItem = { id, ...cleanData, createdAt: new Date() };
+            
+            if (itemIndex !== -1) {
+              if (options.merge) {
+                data[itemIndex] = { ...data[itemIndex], ...cleanData, updatedAt: new Date() };
+              } else {
+                data[itemIndex] = newItem;
+              }
+            } else {
+              data.push(newItem);
+            }
+            return { id };
+          },
+          delete: async () => {
+            const itemIndex = data.findIndex(d => d.id === id);
+            if (itemIndex !== -1) {
+              data.splice(itemIndex, 1);
+            }
             return { id };
           }
         }),
@@ -198,9 +254,11 @@ if (useMockDB) {
           empty: data.length === 0,
           docs: data.map(item => ({
             id: item.id,
-            data: () => item
+            data: () => item,
+            exists: true
           })),
-          forEach: (callback) => data.forEach(item => callback({ id: item.id, data: () => item }))
+          forEach: (callback) => data.forEach(item => callback({ id: item.id, data: () => item })),
+          size: data.length
         }),
         limit: (count) => ({
           get: async () => ({
@@ -211,13 +269,79 @@ if (useMockDB) {
             })),
             size: Math.min(data.length, count)
           })
+        }),
+        orderBy: (field, direction = 'asc') => ({
+          get: async () => {
+            const sorted = [...data].sort((a, b) => {
+              const aVal = a[field];
+              const bVal = b[field];
+              if (direction === 'desc') {
+                return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+              }
+              return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+            });
+            return {
+              empty: sorted.length === 0,
+              docs: sorted.map(item => ({
+                id: item.id,
+                data: () => item
+              })),
+              size: sorted.length
+            };
+          },
+          where: (field, operator, value) => {
+            // For chaining where with orderBy in mock
+            const filtered = data.filter(item => {
+              if (operator === '==') return item[field] === value;
+              return true;
+            });
+            const sorted = filtered.sort((a, b) => {
+              const aVal = a[field];
+              const bVal = b[field];
+              if (direction === 'desc') {
+                return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+              }
+              return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+            });
+            return {
+              get: async () => ({
+                empty: sorted.length === 0,
+                docs: sorted.map(item => ({
+                  id: item.id,
+                  data: () => item
+                })),
+                size: sorted.length
+              })
+            };
+          }
         })
       };
     },
-    batch: () => ({
-      delete: (ref) => {},
-      commit: async () => {}
-    })
+    batch: () => {
+      const writes = [];
+      return {
+        set: (ref, data) => {
+          writes.push({ type: 'set', ref, data });
+        },
+        update: (ref, data) => {
+          writes.push({ type: 'update', ref, data });
+        },
+        delete: (ref) => {
+          writes.push({ type: 'delete', ref });
+        },
+        commit: async () => {
+          for (const write of writes) {
+            if (write.type === 'set') {
+              await write.ref.set(write.data);
+            } else if (write.type === 'update') {
+              await write.ref.update(write.data);
+            } else if (write.type === 'delete') {
+              await write.ref.delete();
+            }
+          }
+        }
+      };
+    }
   };
   console.log('✅ Mock database initialized with sample institutions and courses');
 }
@@ -241,15 +365,39 @@ const removeUndefinedValues = (obj) => {
 
 const app = express();
 
-// Middleware
+// Enhanced CORS configuration for Render
+const allowedOrigins = [
+  'https://group-assignment-2-ypxs.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'https://group-assignment-2-ypxs.onrender.com',
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('Blocked by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json({ limit: process.env.MAX_FILE_SIZE || '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production-make-it-very-long-and-secure';
 
 // Enhanced Authentication middleware with better error handling
 const authenticateToken = async (req, res, next) => {
@@ -384,6 +532,8 @@ const filterDocuments = (docs, conditions) => {
           return value === condition.value;
         case 'in':
           return Array.isArray(condition.value) ? condition.value.includes(value) : false;
+        case 'array-contains':
+          return Array.isArray(value) ? value.includes(condition.value) : false;
         default:
           return true;
       }
@@ -458,8 +608,8 @@ app.post('/api/register', async (req, res) => {
       phone: phone || '',
       status: 'active', // Auto-approve all users
       isVerified: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
 
     // Add role-specific data
@@ -508,8 +658,8 @@ app.post('/api/register', async (req, res) => {
         certificates: [],
         jobApplications: [],
         status: 'active',
-        createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        createdAt: new Date(),
+        updatedAt: new Date()
       }));
       console.log('✅ Student profile created');
     } else if (role === 'institution') {
@@ -523,8 +673,8 @@ app.post('/api/register', async (req, res) => {
         faculties: [],
         courses: [],
         status: 'active',
-        createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        createdAt: new Date(),
+        updatedAt: new Date()
       }));
       console.log('✅ Institution profile created');
     } else if (role === 'company') {
@@ -537,8 +687,8 @@ app.post('/api/register', async (req, res) => {
         industry: industry || '',
         status: 'active',
         jobPostings: [],
-        createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        createdAt: new Date(),
+        updatedAt: new Date()
       }));
       console.log('✅ Company profile created');
     }
@@ -963,8 +1113,8 @@ app.post('/api/student/apply/course-comprehensive', authenticateToken, requireRo
       courseName: courseData.name,
       studentName: userData.name,
       studentEmail: userData.email,
-      appliedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      appliedAt: new Date(),
+      updatedAt: new Date()
     });
 
     // Comprehensive application data (all form fields) - CLEANED OF UNDEFINED VALUES
@@ -1061,8 +1211,8 @@ app.post('/api/student/apply/course-comprehensive', authenticateToken, requireRo
       
       // Metadata
       status: 'pending',
-      appliedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      appliedAt: new Date(),
+      updatedAt: new Date()
     });
 
     // Save both documents in a batch write for atomic operation
@@ -1073,7 +1223,7 @@ app.post('/api/student/apply/course-comprehensive', authenticateToken, requireRo
 
     // Update student profile
     await db.collection('student_profile').doc(req.user.id).update({
-      applications: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(applicationRef.id) : [applicationRef.id]
+      applications: [...(userData.applications || []), applicationRef.id]
     });
 
     // Create notification for institution
@@ -1084,7 +1234,7 @@ app.post('/api/student/apply/course-comprehensive', authenticateToken, requireRo
       message: `New comprehensive application received for ${courseData.name} from ${userData.name}`,
       applicationId: applicationRef.id,
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     // Try to create notification, but don't fail if index issues
@@ -1474,15 +1624,15 @@ app.post('/api/student/apply/course', authenticateToken, requireRole(['student']
       courseName: courseData.name,
       studentName: userData.name,
       studentEmail: userData.email,
-      appliedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      appliedAt: new Date(),
+      updatedAt: new Date()
     });
 
     await applicationRef.set(applicationData);
 
     // Update student profile
     await db.collection('student_profile').doc(req.user.id).update({
-      applications: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(applicationRef.id) : [applicationRef.id]
+      applications: [...(userData.applications || []), applicationRef.id]
     });
 
     // Create notification for institution
@@ -1493,7 +1643,7 @@ app.post('/api/student/apply/course', authenticateToken, requireRole(['student']
       message: `New application received for ${courseData.name}`,
       applicationId: applicationRef.id,
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     // Try to create notification, but don't fail if index issues
@@ -1547,14 +1697,14 @@ app.post('/api/student/transcript', authenticateToken, requireRole(['student']),
       year: parseInt(year) || 0,
       grades,
       transcriptData: transcriptData || '', // Store base64 data if provided
-      uploadedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      uploadedAt: new Date()
     });
 
     await transcriptRef.set(transcriptPayload);
 
     // Update student profile
     await db.collection('student_profile').doc(req.user.id).update({
-      transcripts: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(transcriptRef.id) : [transcriptRef.id]
+      transcripts: [...(userData.transcripts || []), transcriptRef.id]
     });
 
     // Return the complete transcript data for immediate display
@@ -1631,14 +1781,14 @@ app.post('/api/student/certificate', authenticateToken, requireRole(['student'])
       issuingOrganization,
       dateIssued,
       certificateData: certificateData || '',
-      uploadedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      uploadedAt: new Date()
     });
 
     await certificateRef.set(certificatePayload);
 
     // Update student profile
     await db.collection('student_profile').doc(req.user.id).update({
-      certificates: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(certificateRef.id) : [certificateRef.id]
+      certificates: [...(userData.certificates || []), certificateRef.id]
     });
 
     // Return the complete certificate data for immediate display
@@ -1784,15 +1934,15 @@ app.post('/api/student/apply/job', authenticateToken, requireRole(['student']), 
       status: 'pending',
       companyId: jobDoc.data().companyId,
       jobTitle: jobDoc.data().title,
-      appliedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      appliedAt: new Date(),
+      updatedAt: new Date()
     });
 
     await applicationRef.set(applicationData);
 
     // Update student profile
     await db.collection('student_profile').doc(req.user.id).update({
-      jobApplications: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(applicationRef.id) : [applicationRef.id]
+      jobApplications: [...(userData.jobApplications || []), applicationRef.id]
     });
 
     // Create notification for company
@@ -1803,7 +1953,7 @@ app.post('/api/student/apply/job', authenticateToken, requireRole(['student']), 
       message: `New application received for ${jobDoc.data().title}`,
       applicationId: applicationRef.id,
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     // Try to create notification, but don't fail if index issues
@@ -1839,7 +1989,7 @@ app.put('/api/student/notifications/:notificationId/read', authenticateToken, re
 
     await db.collection('notifications').doc(notificationId).update({
       read: true,
-      readAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      readAt: new Date()
     });
 
     res.json({ success: true, message: 'Notification marked as read' });
@@ -1861,13 +2011,13 @@ app.put('/api/student/type', authenticateToken, requireRole(['student']), async 
     // Update user document
     await db.collection('users').doc(req.user.id).update({
       studentType,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     });
 
     // Update student profile
     await db.collection('student_profile').doc(req.user.id).update({
       studentType,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     });
 
     res.json({ success: true, message: 'Student type updated successfully', studentType });
@@ -1944,14 +2094,16 @@ app.post('/api/institution/faculties', authenticateToken, requireRole(['institut
       name,
       description,
       institutionId: req.user.id,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     await facultyRef.set(facultyData);
 
     // Add faculty to institution
+    const institutionDoc = await db.collection('institution').doc(req.user.id).get();
+    const institutionData = institutionDoc.data();
     await db.collection('institution').doc(req.user.id).update({
-      faculties: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(facultyRef.id) : [facultyRef.id]
+      faculties: [...(institutionData.faculties || []), facultyRef.id]
     });
 
     console.log('✅ Faculty added successfully:', facultyRef.id);
@@ -2048,14 +2200,16 @@ app.post('/api/institution/courses', authenticateToken, requireRole(['institutio
       availableSeats: parseInt(seats),
       totalSeats: parseInt(seats),
       status: 'active',
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     await courseRef.set(courseData);
 
     // Add course to institution
+    const institutionDoc = await db.collection('institution').doc(req.user.id).get();
+    const institutionData = institutionDoc.data();
     await db.collection('institution').doc(req.user.id).update({
-      courses: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(courseRef.id) : [courseRef.id]
+      courses: [...(institutionData.courses || []), courseRef.id]
     });
 
     console.log('✅ Course added successfully:', courseRef.id);
@@ -2181,14 +2335,14 @@ app.put('/api/institution/applications/:applicationId', authenticateToken, requi
     const updateData = removeUndefinedValues({
       status,
       notes: notes || '',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     });
 
     // Add timestamps for approval/rejection
     if (status === 'approved') {
-      updateData.approvedAt = admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date();
+      updateData.approvedAt = new Date();
     } else if (status === 'rejected') {
-      updateData.rejectedAt = admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date();
+      updateData.rejectedAt = new Date();
     }
 
     await db.collection('applications').doc(applicationId).update(updateData);
@@ -2201,7 +2355,7 @@ app.put('/api/institution/applications/:applicationId', authenticateToken, requi
       message: `Your application for ${application.courseName} has been ${status}`,
       applicationId: applicationId,
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     // Try to create notification, but don't fail if index issues
@@ -2235,7 +2389,7 @@ app.post('/api/institution/publish-admissions', authenticateToken, requireRole([
     }
 
     const batch = db.batch();
-    const timestamp = admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date();
+    const timestamp = new Date();
 
     for (const applicationId of applicationIds) {
       const applicationRef = db.collection('applications').doc(applicationId);
@@ -2378,7 +2532,7 @@ app.put('/api/institution/courses/:courseId', authenticateToken, requireRole(['i
 
     await db.collection('courses').doc(courseId).update(removeUndefinedValues({
       ...updateData,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     }));
 
     res.json({ success: true, message: 'Course updated successfully' });
@@ -2407,7 +2561,7 @@ app.delete('/api/institution/courses/:courseId', authenticateToken, requireRole(
     // Soft delete by updating status
     await db.collection('courses').doc(courseId).update({
       status: 'inactive',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     });
 
     res.json({ success: true, message: 'Course deleted successfully' });
@@ -2438,7 +2592,7 @@ app.put('/api/institution/faculties/:facultyId', authenticateToken, requireRole(
 
     await db.collection('faculties').doc(facultyId).update(removeUndefinedValues({
       ...updateData,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     }));
 
     res.json({ success: true, message: 'Faculty updated successfully' });
@@ -2480,8 +2634,11 @@ app.delete('/api/institution/faculties/:facultyId', authenticateToken, requireRo
     await db.collection('faculties').doc(facultyId).delete();
 
     // Remove from institution
+    const institutionDoc = await db.collection('institution').doc(req.user.id).get();
+    const institutionData = institutionDoc.data();
+    const updatedFaculties = (institutionData.faculties || []).filter(id => id !== facultyId);
     await db.collection('institution').doc(req.user.id).update({
-      faculties: admin.firestore.FieldValue.arrayRemove ? admin.firestore.FieldValue.arrayRemove(facultyId) : []
+      faculties: updatedFaculties
     });
 
     res.json({ success: true, message: 'Faculty deleted successfully' });
@@ -2583,15 +2740,17 @@ app.post('/api/company/jobs', authenticateToken, requireRole(['company']), async
       status: 'active',
       applications: 0,
       qualifiedApplications: 0,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
 
     await jobRef.set(jobData);
 
     // Update company profile
+    const companyDoc = await db.collection('company_profile').doc(req.user.id).get();
+    const companyData = companyDoc.data();
     await db.collection('company_profile').doc(req.user.id).update({
-      jobPostings: admin.firestore.FieldValue.arrayUnion ? admin.firestore.FieldValue.arrayUnion(jobRef.id) : [jobRef.id]
+      jobPostings: [...(companyData.jobPostings || []), jobRef.id]
     });
 
     console.log('✅ Job posting created successfully:', jobRef.id);
@@ -2771,7 +2930,7 @@ app.put('/api/company/applications/:applicationId', authenticateToken, requireRo
     const updateData = removeUndefinedValues({
       status,
       notes: notes || '',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      updatedAt: new Date()
     });
 
     await db.collection('applications').doc(applicationId).update(updateData);
@@ -2784,7 +2943,7 @@ app.put('/api/company/applications/:applicationId', authenticateToken, requireRo
       message: `Your application for ${application.jobTitle} has been ${status}`,
       applicationId: applicationId,
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     });
 
     // Try to create notification, but don't fail if index issues
@@ -2953,20 +3112,13 @@ app.get('/api/admin/statistics', authenticateToken, requireRole(['admin']), asyn
     ]);
 
     // Count students by type
-    const highSchoolStudents = await db.collection('users')
-      .where('role', '==', 'student')
-      .where('studentType', '==', 'highschool')
-      .get();
-
-    const collegeStudents = await db.collection('users')
-      .where('role', '==', 'student')
-      .where('studentType', '==', 'college')
-      .get();
+    const highSchoolStudents = studentsSnapshot.docs.filter(doc => doc.data().studentType === 'highschool');
+    const collegeStudents = studentsSnapshot.docs.filter(doc => doc.data().studentType === 'college');
 
     const statistics = {
       totalStudents: studentsSnapshot.size,
-      highSchoolStudents: highSchoolStudents.size,
-      collegeStudents: collegeStudents.size,
+      highSchoolStudents: highSchoolStudents.length,
+      collegeStudents: collegeStudents.length,
       totalInstitutions: institutionsSnapshot.size,
       totalCompanies: companiesSnapshot.size,
       totalApplications: applicationsSnapshot.size,
@@ -3016,17 +3168,17 @@ app.put('/api/profile', authenticateToken, async (req, res) => {
     if (req.user.role === 'student') {
       await db.collection('student_profile').doc(req.user.id).update(removeUndefinedValues({
         ...updateData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        updatedAt: new Date()
       }));
     } else if (req.user.role === 'institution') {
       await db.collection('institution').doc(req.user.id).update(removeUndefinedValues({
         ...updateData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        updatedAt: new Date()
       }));
     } else if (req.user.role === 'company') {
       await db.collection('company_profile').doc(req.user.id).update(removeUndefinedValues({
         ...updateData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        updatedAt: new Date()
       }));
     }
 
@@ -3041,7 +3193,7 @@ app.put('/api/profile', authenticateToken, async (req, res) => {
     if (Object.keys(userUpdate).length > 0) {
       await db.collection('users').doc(req.user.id).update(removeUndefinedValues({
         ...userUpdate,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        updatedAt: new Date()
       }));
     }
 
@@ -3060,7 +3212,9 @@ app.get('/api/health', (req, res) => {
     message: 'Server is running!', 
     timestamp: new Date().toISOString(),
     firebase: useMockDB ? 'Mock Database' : 'Connected ✅',
-    project: process.env.FIREBASE_PROJECT_ID
+    project: process.env.FIREBASE_PROJECT_ID || 'Not configured',
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 10000
   });
 });
 
@@ -3071,7 +3225,7 @@ app.get('/api/test-db', async (req, res) => {
     await testRef.set(removeUndefinedValues({
       test: true,
       message: 'Database connection successful',
-      timestamp: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      timestamp: new Date()
     }));
     
     // Test read operation
@@ -3082,7 +3236,7 @@ app.get('/api/test-db', async (req, res) => {
     
     res.json({ 
       success: true,
-      message: 'Firestore database is working!',
+      message: 'Database is working!',
       database: useMockDB ? 'Mock Database' : 'Real Firebase',
       write: 'successful',
       read: 'successful',
@@ -3124,7 +3278,7 @@ app.post('/api/init-sample-data', authenticateToken, requireRole(['admin']), asy
       await instRef.set(removeUndefinedValues({
         ...instData,
         status: 'active',
-        createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        createdAt: new Date()
       }));
 
       // Create sample courses
@@ -3153,7 +3307,7 @@ app.post('/api/init-sample-data', authenticateToken, requireRole(['admin']), asy
           ...courseData,
           institutionId: instRef.id,
           status: 'active',
-          createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+          createdAt: new Date()
         }));
       }
     }
@@ -3167,7 +3321,7 @@ app.post('/api/init-sample-data', authenticateToken, requireRole(['admin']), asy
       industry: 'Information Technology',
       description: 'Leading IT solutions provider in Lesotho',
       status: 'active',
-      createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+      createdAt: new Date()
     }));
 
     // Create sample job postings
@@ -3200,7 +3354,7 @@ app.post('/api/init-sample-data', authenticateToken, requireRole(['admin']), asy
         ...jobData,
         companyId: companyRef.id,
         status: 'active',
-        createdAt: admin.firestore.FieldValue.serverTimestamp ? admin.firestore.FieldValue.serverTimestamp() : new Date()
+        createdAt: new Date()
       }));
     }
 
@@ -3211,8 +3365,48 @@ app.post('/api/init-sample-data', authenticateToken, requireRole(['admin']), asy
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Career Guidance Platform API Server',
+    version: '1.0.0',
+    status: 'Running',
+    database: useMockDB ? 'Mock Database' : 'Firebase',
+    endpoints: {
+      health: '/api/health',
+      auth: ['/api/register', '/api/login'],
+      student: '/api/student/*',
+      institution: '/api/institution/*',
+      company: '/api/company/*',
+      admin: '/api/admin/*'
+    },
+    documentation: 'See README for API documentation'
+  });
+});
+
+// Handle 404 errors
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found',
+    path: req.originalUrl,
+    method: req.method
+  });
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('Unhandled error:', error);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: error.message
+  });
+});
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🗄️  Database test: http://localhost:${PORT}/api/test-db`);
@@ -3223,4 +3417,5 @@ app.listen(PORT, () => {
   console.log(`🏫 Institution endpoints available`);
   console.log(`💼 Company endpoints available`);
   console.log(`👨‍💼 Admin endpoints available`);
+  console.log(`🌍 Server accessible at: https://group-assignment-2-ypxs.onrender.com`);
 });
