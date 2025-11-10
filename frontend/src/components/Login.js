@@ -2,7 +2,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com/api';
+// Use relative path for same-domain deployment, or absolute for cross-domain
+const API_BASE_URL = window.location.hostname === 'group-assignment-12.onrender.com' 
+  ? 'https://group-assignment-2-ypxs.onrender.com/api'
+  : '/api';
 
 const Login = ({ onLogin }) => {
   const [formData, setFormData] = useState({
@@ -34,6 +37,7 @@ const Login = ({ onLogin }) => {
 
     try {
       console.log('🔐 Attempting login for:', formData.email);
+      console.log('🌐 Using API URL:', `${API_BASE_URL}/login`);
       
       const response = await fetch(`${API_BASE_URL}/login`, {
         method: 'POST',
@@ -46,7 +50,16 @@ const Login = ({ onLogin }) => {
         }),
       });
 
-      const result = await response.json();
+      // Handle non-JSON responses
+      const contentType = response.headers.get('content-type');
+      let result;
+      
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(`Server returned non-JSON response: ${text}`);
+      }
 
       console.log('📨 Login response:', result);
 
@@ -89,8 +102,8 @@ const Login = ({ onLogin }) => {
       
       if (error.message.includes('Invalid email or password')) {
         errorMessage = 'Invalid email or password';
-      } else if (error.message.includes('Failed to fetch')) {
-        errorMessage = 'Cannot connect to server. Please check your internet connection.';
+      } else if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+        errorMessage = 'Cannot connect to server. This may be a CORS issue. Please try again or contact support.';
       } else if (error.message.includes('User not found')) {
         errorMessage = 'No account found with this email. Please register first.';
       } else {
@@ -103,14 +116,21 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  // Test server connection
+  // Test server connection with CORS handling
   const testConnection = async () => {
     try {
+      console.log('Testing connection to:', `${API_BASE_URL}/health`);
       const response = await fetch(`${API_BASE_URL}/health`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const result = await response.json();
-      alert(`Server status: ${result.message}\nDatabase: ${result.firebase}\nURL: ${API_BASE_URL}`);
+      alert(`✅ Server is running!\nMessage: ${result.message}\nDatabase: ${result.firebase}\nURL: ${API_BASE_URL}`);
     } catch (error) {
-      alert(`Cannot connect to server at ${API_BASE_URL}. Please check if the server is running.`);
+      console.error('Connection test failed:', error);
+      alert(`❌ Cannot connect to server:\n${error.message}\n\nThis is likely a CORS issue. Please ensure the backend allows requests from this domain.`);
     }
   };
 
@@ -125,12 +145,16 @@ const Login = ({ onLogin }) => {
 
           {error && (
             <div className="alert alert-error">
-              {error}
-              {error.includes('Cannot connect to server') && (
-                <div style={{ marginTop: '10px', fontSize: '14px' }}>
-                  Server URL: {API_BASE_URL}
+              <strong>Error:</strong> {error}
+              <div style={{ marginTop: '10px', fontSize: '14px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
+                <div><strong>Frontend:</strong> {window.location.origin}</div>
+                <div><strong>Backend:</strong> {API_BASE_URL}</div>
+                <div style={{ marginTop: '5px', color: '#dc3545' }}>
+                  <small>
+                    CORS Issue Detected: The backend server needs to allow requests from this domain.
+                  </small>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -192,7 +216,7 @@ const Login = ({ onLogin }) => {
                 Create one here
               </Link>
             </p>
-            <p style={{ marginTop: '10px', fontSize: '14px' }}>
+            <div style={{ marginTop: '10px', fontSize: '12px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
               <button 
                 type="button" 
                 onClick={testConnection}
@@ -203,15 +227,19 @@ const Login = ({ onLogin }) => {
                   padding: '5px 10px',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '12px'
+                  fontSize: '12px',
+                  marginBottom: '5px'
                 }}
               >
                 Test Server Connection
               </button>
-              <span style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
-                Server: {API_BASE_URL}
-              </span>
-            </p>
+              <div>
+                <strong>Frontend:</strong> {window.location.origin}
+              </div>
+              <div>
+                <strong>Backend API:</strong> {API_BASE_URL}
+              </div>
+            </div>
           </div>
         </div>
         <div className="auth-left">

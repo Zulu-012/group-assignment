@@ -422,13 +422,16 @@ const removeUndefinedValues = (obj) => {
 
 const app = express();
 
-// Enhanced CORS configuration for Render
+// Enhanced CORS configuration for Render - UPDATED WITH FRONTEND DOMAIN
 const allowedOrigins = [
   'https://group-assignment-2-ypxs.onrender.com',
+  'https://group-assignment-12.onrender.com', // ADDED: Your frontend domain
   'http://localhost:3000',
   'http://localhost:5173',
   process.env.FRONTEND_URL
 ].filter(Boolean);
+
+console.log('🌐 Allowed CORS origins:', allowedOrigins);
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -436,15 +439,16 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('✅ Allowed CORS request from:', origin);
       callback(null, true);
     } else {
-      console.log('Blocked by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
+      console.log('❌ Blocked by CORS:', origin);
+      callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 
 // Handle preflight requests
@@ -3268,7 +3272,11 @@ app.get('/api/health', (req, res) => {
     firebase: useMockDB ? 'Mock Database' : 'Connected ✅',
     project: FIREBASE_CONFIG.projectId,
     environment: process.env.NODE_ENV || 'development',
-    port: process.env.PORT || 10000
+    port: process.env.PORT || 10000,
+    cors: {
+      allowedOrigins: allowedOrigins,
+      frontendDetected: req.headers.origin || 'No origin header'
+    }
   });
 });
 
@@ -3427,6 +3435,10 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     status: 'Running',
     database: useMockDB ? 'Mock Database' : 'Firebase',
+    cors: {
+      allowedOrigins: allowedOrigins,
+      currentOrigin: req.headers.origin || 'No origin header'
+    },
     endpoints: {
       health: '/api/health',
       auth: ['/api/register', '/api/login'],
@@ -3466,6 +3478,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🗄️  Database test: http://localhost:${PORT}/api/test-db`);
   console.log(`🔐 Authentication endpoints available`);
   console.log(`📊 Database: ${useMockDB ? 'MOCK DATABASE' : 'FIREBASE LIVE'}`);
+  console.log(`🌍 CORS Allowed Origins:`, allowedOrigins);
   console.log(`👨‍🎓 Student endpoints available (High School & College)`);
   console.log(`📋 Comprehensive application endpoint: POST /api/student/apply/course-comprehensive`);
   console.log(`🏫 Institution endpoints available`);
