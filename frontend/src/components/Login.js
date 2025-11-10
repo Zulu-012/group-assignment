@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com/api';
+const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com/api';
 
 const Login = ({ onLogin }) => {
   const [formData, setFormData] = useState({
@@ -90,7 +90,7 @@ const Login = ({ onLogin }) => {
       if (error.message.includes('Invalid email or password')) {
         errorMessage = 'Invalid email or password';
       } else if (error.message.includes('Failed to fetch')) {
-        errorMessage = 'Cannot connect to server. Please make sure the backend server is running on port 5000.';
+        errorMessage = 'Cannot connect to server. Please check your internet connection.';
       } else if (error.message.includes('User not found')) {
         errorMessage = 'No account found with this email. Please register first.';
       } else {
@@ -108,9 +108,9 @@ const Login = ({ onLogin }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/health`);
       const result = await response.json();
-      alert(`Server status: ${result.message}\nDatabase: ${result.firebase}`);
+      alert(`Server status: ${result.message}\nDatabase: ${result.firebase}\nURL: ${API_BASE_URL}`);
     } catch (error) {
-      alert('Cannot connect to server. Make sure the backend is running.');
+      alert(`Cannot connect to server at ${API_BASE_URL}. Please check if the server is running.`);
     }
   };
 
@@ -128,7 +128,7 @@ const Login = ({ onLogin }) => {
               {error}
               {error.includes('Cannot connect to server') && (
                 <div style={{ marginTop: '10px', fontSize: '14px' }}>
-                  Make sure your backend server is running with: <code>node server.js</code>
+                  Server URL: {API_BASE_URL}
                 </div>
               )}
             </div>
@@ -202,11 +202,15 @@ const Login = ({ onLogin }) => {
                   color: '#007bff',
                   padding: '5px 10px',
                   borderRadius: '4px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: '12px'
                 }}
               >
                 Test Server Connection
               </button>
+              <span style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
+                Server: {API_BASE_URL}
+              </span>
             </p>
           </div>
         </div>

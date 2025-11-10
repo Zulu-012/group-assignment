@@ -2,11 +2,11 @@
   "name": "career-guidance-backend",
   "version": "1.0.0",
   "description": "Backend for Career Guidance System",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
-  
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
