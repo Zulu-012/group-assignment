@@ -1,10 +1,14 @@
-const express = require('express');
-const cors = require('cors');
-const admin = require('firebase-admin');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import admin from 'firebase-admin';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+dotenv.config();
 
 console.log('🔧 Loading environment variables...');
 console.log('Project ID:', process.env.FIREBASE_PROJECT_ID ? '✅ Found' : '❌ Missing');
