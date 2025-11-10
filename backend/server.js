@@ -15,21 +15,73 @@ console.log('Project ID:', process.env.FIREBASE_PROJECT_ID ? '✅ Found' : '❌ 
 console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL ? '✅ Found' : '❌ Missing');
 console.log('Private Key:', process.env.FIREBASE_PRIVATE_KEY ? '✅ Found (length: ' + process.env.FIREBASE_PRIVATE_KEY.length + ')' : '❌ Missing');
 
+// Embedded Firebase Configuration
+const FIREBASE_CONFIG = {
+  projectId: 'group-eff37',
+  privateKeyId: '8ba03ac4e8a51e4ca1b95471a30872a26d03ad53',
+  privateKey: `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDUuH5N9ep4wnux
+cC6q+bI6x50hCrRVbdhOWyTZq8/WSlsqV+F3Gahr6W+b4qINp6Cd42Mw6RVl8sgK
+BCPPq8xp2X/HGhVXkCcK5F/OdgrkEkaVXMsnPHw+9/ylwHJf2jXV3OOwmfj4E46N
+GelMZVvgzdcgZWvhhBLr80e40Ackf3nzEAZ86fchkGKZ98gOYAMdDOKZxcINHkr3
+1bqouJF/HvbXbwig7h2QUct3gp60sp5AvJSmkXe/msaAS9CXruUMqWhekCEBz+s1
+DL0hoo+oY2bBEmClAMKeoCq7H9G0yae357C1mp++UfF9nlSHLpJOM/oxf5dD8T7Z
+C3RKjvZJAgMBAAECggEAWi+8MP5tgfRmr+RxjMCfjWc7GZqpuTyAhDwFRBohXGea
+/jlTGIUy0EmgrZUpAqQKp1YUJFT14wrLP9/gdPgQCuKRV48Z9E1kGCyZ5/VJCcgr
+z8CPSxvMS4AlR/rvIu9nerwTdrjZAwh7nBwbuu2QRh/PMOd/FRZDVXEH+/WKybBS
+WHeXOv+F7DBcWRp3xLC36rNlgTiIV5btL0BCiTDb5QHnOo00DGm6OAHBUdyhygfK
+GdkVRPOtvR5F6Cf51xwCrbXt0+3AiU9dRIJBWhVkLEVRRbGOzXNq39sdBeIZftGG
+Y3ygv897UZBWkj1ougnKzmp0yUWdSiS/Bn2Plu2GvwKBgQDrKSU3GcxbH0u4JfUC
+/E+Ah1hnoqE72XrO6TIldBPMqBVXvqECP1Ds41aMtbVnmDKD4HuBETD7dnk+Ser/
+dZ3ioUpbiD8nWWDdwGy/aqyizMuumFgRn7XpWZV7qNlg5EQsdvjmBhnCoWwmS+X6
+dgpkenpbpmNhZpcqr6UWvPX9ZwKBgQDnkkXzxS0zA+HwWxlwzr8i0jA3BRKzQ3XQ
+z1o2rRw9IJTD563qSKqFUUHc9urj7331rqUiI/I1RTXnG1xhdMk77qlrsNqOIvR8
+R9Q6WrtcvC31OcUDxRPJRJ43FbXspgUGmikBMotCiLPfwzNUGN3asTkSUT8BH+Lq
+SgA18KZwzwKBgD1UacRJEibhrpnELHYu330hz0iX/XziZ0j3QIDMGS3S2F4d9Vfk
+s3JUiAoCieEOrH4AWbV7ik7Kwywfkw402ox0jDP7AJ1+jejHepUheQysZKKQUMen
+44WMO5QYoTjHz4/ZJ2i2RpmgB9ilCsGbb3JtDuRALMMGQn57eI7JkU4ZAoGAVb/o
+f1goYJezdpmFVix4wqAqknUic5crbWMa+NwpdMk3zUNhNzwpSKzKQtR8LmNktTEy
+nO3Kpsc2KpoLH1trmPHLcsFObQuslMjUYbdvYeuc6Q23UqoLpZ/vJl63uyXO/p7f
+SD47KywLz3Qs8Zszq+OsSogjWHtCP5efdFnkiCkCgYEAnsPZyL9QBS99iT2DiXIU
+L3KX3Zlf9PIxdbpBKcbFKCBG2ULQ43V9pGILVJaMqWBA54Gz9c2WxYIrCoOjQ13L
+AJoV9tH9peUhphtNUGylpRajyQ99btjtIcx8S9tyaYSbL8QT01EQG7uQN/v7BhaI
+6VcLcXUAkWkptiMxCAzJL1M=
+-----END PRIVATE KEY-----`,
+  clientEmail: 'firebase-adminsdk-fbsvc@group-eff37.iam.gserviceaccount.com',
+  clientId: '100643043923821458992'
+};
+
+// JWT Configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production-make-it-very-long-and-secure';
+
 // Initialize Firebase Admin
 let db;
 let useMockDB = false;
 
 // Enhanced environment variable parsing for Render
 const getFirebaseConfig = () => {
-  // Try multiple ways to get the private key
+  // First try environment variables
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
   
   if (!privateKey) {
-    console.log('❌ No private key found in environment variables');
-    return null;
+    console.log('⚠️  No private key in environment, using embedded configuration');
+    // Use embedded configuration
+    return {
+      type: "service_account",
+      project_id: FIREBASE_CONFIG.projectId,
+      private_key_id: FIREBASE_CONFIG.privateKeyId,
+      private_key: FIREBASE_CONFIG.privateKey,
+      client_email: FIREBASE_CONFIG.clientEmail,
+      client_id: FIREBASE_CONFIG.clientId,
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(FIREBASE_CONFIG.clientEmail)}`,
+      universe_domain: "googleapis.com"
+    };
   }
 
-  // Handle different formats of private key
+  // Handle different formats of private key from environment
   if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
     privateKey = privateKey.slice(1, -1);
   }
@@ -60,20 +112,20 @@ const getFirebaseConfig = () => {
 try {
   const firebaseConfig = getFirebaseConfig();
   
-  if (!firebaseConfig || !process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL) {
+  if (!firebaseConfig) {
     console.log('⚠️  Firebase credentials incomplete, using mock database for development');
     useMockDB = true;
   } else {
-    console.log('🚀 Initializing Firebase Admin with provided credentials...');
-    console.log('📁 Project:', process.env.FIREBASE_PROJECT_ID);
-    console.log('📧 Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+    console.log('🚀 Initializing Firebase Admin with credentials...');
+    console.log('📁 Project:', firebaseConfig.project_id);
+    console.log('📧 Client Email:', firebaseConfig.client_email);
 
     try {
       // Initialize Firebase only if not already initialized
       if (admin.apps.length === 0) {
         admin.initializeApp({
           credential: admin.credential.cert(firebaseConfig),
-          databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
+          databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${firebaseConfig.project_id}-default-rtdb.firebaseio.com`
         });
       }
 
@@ -88,6 +140,7 @@ try {
       await testRef.delete();
 
       console.log('✅ Firebase initialized successfully');
+      useMockDB = false;
     } catch (firebaseError) {
       console.log('❌ Firebase initialization failed:', firebaseError.message);
       console.log('Error details:', firebaseError);
@@ -399,9 +452,6 @@ app.options('*', cors());
 
 app.use(express.json({ limit: process.env.MAX_FILE_SIZE || '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production-make-it-very-long-and-secure';
 
 // Enhanced Authentication middleware with better error handling
 const authenticateToken = async (req, res, next) => {
@@ -3216,7 +3266,7 @@ app.get('/api/health', (req, res) => {
     message: 'Server is running!', 
     timestamp: new Date().toISOString(),
     firebase: useMockDB ? 'Mock Database' : 'Connected ✅',
-    project: process.env.FIREBASE_PROJECT_ID || 'Not configured',
+    project: FIREBASE_CONFIG.projectId,
     environment: process.env.NODE_ENV || 'development',
     port: process.env.PORT || 10000
   });
