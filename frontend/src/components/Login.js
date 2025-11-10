@@ -3,9 +3,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 // Use relative path for same-domain deployment, or absolute for cross-domain
-const API_BASE_URL = window.location.hostname === 'group-assignment-12.onrender.com' 
-  ? 'https://group-assignment-2-ypxs.onrender.com/api'
-  : '/api';
+const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com';
 
 const Login = ({ onLogin }) => {
   const [formData, setFormData] = useState({
@@ -37,9 +35,9 @@ const Login = ({ onLogin }) => {
 
     try {
       console.log('🔐 Attempting login for:', formData.email);
-      console.log('🌐 Using API URL:', `${API_BASE_URL}/login`);
+      console.log('🌐 Using API URL:', `${API_BASE_URL}/api/login`);
       
-      const response = await fetch(`${API_BASE_URL}/login`, {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,8 +117,8 @@ const Login = ({ onLogin }) => {
   // Test server connection with CORS handling
   const testConnection = async () => {
     try {
-      console.log('Testing connection to:', `${API_BASE_URL}/health`);
-      const response = await fetch(`${API_BASE_URL}/health`);
+      console.log('Testing connection to:', `${API_BASE_URL}/api/health`);
+      const response = await fetch(`${API_BASE_URL}/api/health`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

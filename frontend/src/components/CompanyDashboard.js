@@ -49,7 +49,7 @@ import {
   Business as BusinessIcon
 } from '@mui/icons-material';
 
-// API base URL - FIX: Use absolute URL with port 5000
+// API base URL - FIXED: Use same URL as other components
 const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com';
 
 const CompanyDashboard = () => {

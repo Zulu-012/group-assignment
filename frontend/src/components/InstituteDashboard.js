@@ -22,6 +22,9 @@ const InstituteDashboard = ({ user }) => {
     seats: ''
   });
 
+  // Use consistent URL for all components
+  const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com';
+
   useEffect(() => {
     loadDashboardData();
   }, [activeTab]);
@@ -35,10 +38,8 @@ const InstituteDashboard = ({ user }) => {
         throw new Error('No authentication token found');
       }
       
-      const baseURL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
-      
       if (activeTab === 'faculties') {
-        const response = await fetch(`${baseURL}/api/institution/faculties`, {
+        const response = await fetch(`${API_BASE_URL}/api/institution/faculties`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -63,7 +64,7 @@ const InstituteDashboard = ({ user }) => {
           throw new Error(data.error || 'Failed to load faculties');
         }
       } else if (activeTab === 'courses') {
-        const response = await fetch(`${baseURL}/api/institution/courses`, {
+        const response = await fetch(`${API_BASE_URL}/api/institution/courses`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -86,7 +87,7 @@ const InstituteDashboard = ({ user }) => {
           throw new Error(data.error || 'Failed to load courses');
         }
       } else if (activeTab === 'applications') {
-        const response = await fetch(`${baseURL}/api/institution/applications`, {
+        const response = await fetch(`${API_BASE_URL}/api/institution/applications`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -109,7 +110,7 @@ const InstituteDashboard = ({ user }) => {
           throw new Error(data.error || 'Failed to load applications');
         }
       } else if (activeTab === 'profile') {
-        const response = await fetch(`${baseURL}/api/profile`, {
+        const response = await fetch(`${API_BASE_URL}/api/profile`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -151,9 +152,8 @@ const InstituteDashboard = ({ user }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const baseURL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
       
-      const response = await fetch(`${baseURL}/api/institution/faculties`, {
+      const response = await fetch(`${API_BASE_URL}/api/institution/faculties`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,9 +195,8 @@ const InstituteDashboard = ({ user }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const baseURL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
       
-      const response = await fetch(`${baseURL}/api/institution/courses`, {
+      const response = await fetch(`${API_BASE_URL}/api/institution/courses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,9 +235,8 @@ const InstituteDashboard = ({ user }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const baseURL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
       
-      const response = await fetch(`${baseURL}/api/institution/applications/${applicationId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/institution/applications/${applicationId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -276,9 +274,8 @@ const InstituteDashboard = ({ user }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const baseURL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
 
-      const response = await fetch(`${baseURL}/api/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
