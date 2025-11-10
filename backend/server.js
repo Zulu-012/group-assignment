@@ -28,6 +28,7 @@ try {
     }
     privateKey = privateKey.replace(/\\n/g, '\n');
 
+    // Use the environment variables directly for service account
     const serviceAccount = {
       type: "service_account",
       project_id: process.env.FIREBASE_PROJECT_ID,
@@ -43,20 +44,22 @@ try {
     };
 
     console.log('🚀 Initializing Firebase Admin...');
-    
+    console.log('📁 Project:', process.env.FIREBASE_PROJECT_ID);
+    console.log('📧 Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+
     // Initialize Firebase only if not already initialized
     if (admin.apps.length === 0) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+        databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
       });
     }
 
     db = admin.firestore();
-    
+
     // Configure Firestore settings to handle undefined values
     db.settings({ ignoreUndefinedProperties: true });
-    
+
     console.log('✅ Firebase initialized successfully');
   }
 } catch (error) {
