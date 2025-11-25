@@ -3,8 +3,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 // Use relative path for same-domain deployment, or absolute for cross-domain
-const API_BASE_URL = window.location.hostname === 'group-assignment-12.onrender.com' 
-  ? 'https://group-assignment-2-ypxs.onrender.com/api'
+const API_BASE_URL = window.location.hostname === 'group-assignment-94en.onrender.com' 
+  ? 'https://group-assignment-94en.onrender.com/api'
   : '/api';
 
 const Register = ({ onLogin }) => {

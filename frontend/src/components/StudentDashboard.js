@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import StudentTypeDashboard from './StudentTypeDashboard';
 import Profile from './Profile';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-94en.onrender.com';
 
 // Helper function to remove undefined and empty string values from objects
 const cleanFormData = (obj) => {

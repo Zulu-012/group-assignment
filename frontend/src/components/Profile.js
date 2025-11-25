@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-94en.onrender.com/api';
 
 const Profile = ({ user: propUser }) => {
   const [user, setUser] = useState(propUser);

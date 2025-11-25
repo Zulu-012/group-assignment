@@ -3484,5 +3484,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🏫 Institution endpoints available`);
   console.log(`💼 Company endpoints available`);
   console.log(`👨‍💼 Admin endpoints available`);
-  console.log(`🌍 Server accessible at: https://group-assignment-2-ypxs.onrender.com`);
+  console.log(`🌍 Server accessible at: https://group-assignment-94en.onrender.com`);
 });
