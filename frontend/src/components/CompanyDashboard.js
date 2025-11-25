@@ -1,4 +1,4 @@
-// CompanyDashboard.js - Updated with StudentDashboard styling approach
+// CompanyDashboard.js - Updated with detailed profile and institution integration
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,6 +36,7 @@ const CompanyDashboard = ({ user: propUser }) => {
   const [jobToEdit, setJobToEdit] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [detailedApplicantData, setDetailedApplicantData] = useState({});
   const navigate = useNavigate();
 
   const [jobForm, setJobForm] = useState({
@@ -174,6 +175,21 @@ const CompanyDashboard = ({ user: propUser }) => {
     }
   };
 
+  // Load detailed applicant profile data
+  const loadApplicantDetails = async (applicantId) => {
+    try {
+      const data = await apiCall(`/company/applicant/${applicantId}`);
+      setDetailedApplicantData(prev => ({
+        ...prev,
+        [applicantId]: data.profile || data.user || {}
+      }));
+      return data.profile || data.user || {};
+    } catch (error) {
+      console.error('Error loading applicant details:', error);
+      return {};
+    }
+  };
+
   // Statistics calculation
   const stats = {
     totalJobs: jobs.length,
@@ -292,8 +308,14 @@ const CompanyDashboard = ({ user: propUser }) => {
     }
   };
 
-  const handleViewApplication = (application) => {
+  const handleViewApplication = async (application) => {
     setSelectedApplication(application);
+    
+    // Load detailed applicant data if not already loaded
+    if (application.studentId && !detailedApplicantData[application.studentId]) {
+      await loadApplicantDetails(application.studentId);
+    }
+    
     setShowApplicationModal(true);
   };
 
@@ -345,6 +367,22 @@ const CompanyDashboard = ({ user: propUser }) => {
       case 'draft': return 'warning';
       default: return 'default';
     }
+  };
+
+  // Get detailed applicant data
+  const getApplicantDetails = (application) => {
+    if (!application.studentId) return null;
+    return detailedApplicantData[application.studentId] || null;
+  };
+
+  // Calculate profile completion percentage
+  const calculateProfileCompletion = (profile) => {
+    if (!profile) return 0;
+    
+    const fields = ['name', 'email', 'phone', 'educationLevel', 'major', 'address'];
+    const completedFields = fields.filter(field => profile[field] && profile[field].trim() !== '').length;
+    
+    return Math.round((completedFields / fields.length) * 100);
   };
 
   // Check if user has company role
@@ -587,78 +625,101 @@ const CompanyDashboard = ({ user: propUser }) => {
       </div>
 
       <div className="applications-list">
-        {filteredApplications.map((application) => (
-          <div key={application.id} className="application-card">
-            <div className="application-header">
-              <div className="applicant-info">
-                <h3>{application.student?.name || 'Unknown Applicant'}</h3>
-                <p className="applicant-email">{application.student?.email || 'No email'}</p>
-                <p className="position">{application.jobTitle}</p>
-              </div>
-              
-              <div className="applicant-score">
-                <div className={`score-badge ${application.score >= 70 ? 'qualified' : ''}`}>
-                  {application.score || 0}%
+        {filteredApplications.map((application) => {
+          const applicantDetails = getApplicantDetails(application);
+          const profileCompletion = calculateProfileCompletion(applicantDetails);
+          
+          return (
+            <div key={application.id} className="application-card">
+              <div className="application-header">
+                <div className="applicant-info">
+                  <h3>{application.student?.name || 'Unknown Applicant'}</h3>
+                  <p className="applicant-email">{application.student?.email || 'No email'}</p>
+                  <p className="position">{application.jobTitle}</p>
+                  
+                  {applicantDetails && (
+                    <div className="applicant-profile-summary">
+                      <span className="profile-completion">
+                        Profile: {profileCompletion}% complete
+                      </span>
+                      {applicantDetails.educationLevel && (
+                        <span className="education-level">
+                          🎓 {applicantDetails.educationLevel}
+                        </span>
+                      )}
+                      {applicantDetails.major && (
+                        <span className="major">
+                          📚 {applicantDetails.major}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {application.score >= 70 && (
-                  <span className="qualified-badge">Qualified</span>
+                
+                <div className="applicant-score">
+                  <div className={`score-badge ${application.score >= 70 ? 'qualified' : ''}`}>
+                    {application.score || 0}%
+                  </div>
+                  {application.score >= 70 && (
+                    <span className="qualified-badge">Qualified</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="applicant-meta">
+                <span className="applied-date">
+                  Applied: {formatDate(application.appliedAt)}
+                </span>
+                <span className={`status-badge ${application.status}`}>
+                  {application.status}
+                </span>
+              </div>
+
+              <div className="applicant-actions">
+                <button 
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleViewApplication(application)}
+                >
+                  View Details
+                </button>
+                
+                {application.status === 'pending' && (
+                  <>
+                    <button 
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleUpdateApplicationStatus(application.id, 'interview')}
+                    >
+                      Schedule Interview
+                    </button>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+                
+                {application.status === 'interview' && (
+                  <>
+                    <button 
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleUpdateApplicationStatus(application.id, 'approved')}
+                    >
+                      Approve
+                    </button>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
+                    >
+                      Reject
+                    </button>
+                  </>
                 )}
               </div>
             </div>
-
-            <div className="applicant-meta">
-              <span className="applied-date">
-                Applied: {formatDate(application.appliedAt)}
-              </span>
-              <span className={`status-badge ${application.status}`}>
-                {application.status}
-              </span>
-            </div>
-
-            <div className="applicant-actions">
-              <button 
-                className="btn btn-primary btn-sm"
-                onClick={() => handleViewApplication(application)}
-              >
-                View Details
-              </button>
-              
-              {application.status === 'pending' && (
-                <>
-                  <button 
-                    className="btn btn-success btn-sm"
-                    onClick={() => handleUpdateApplicationStatus(application.id, 'interview')}
-                  >
-                    Schedule Interview
-                  </button>
-                  <button 
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
-                  >
-                    Reject
-                  </button>
-                </>
-              )}
-              
-              {application.status === 'interview' && (
-                <>
-                  <button 
-                    className="btn btn-success btn-sm"
-                    onClick={() => handleUpdateApplicationStatus(application.id, 'approved')}
-                  >
-                    Approve
-                  </button>
-                  <button 
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
-                  >
-                    Reject
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {filteredApplications.length === 0 && (
@@ -692,68 +753,109 @@ const CompanyDashboard = ({ user: propUser }) => {
       <h2>Qualified Applicants (Score ≥ 70%)</h2>
 
       <div className="applicants-list compact">
-        {qualifiedApplicants.map((applicant) => (
-          <div key={applicant.id} className="applicant-card compact">
-            <div className="applicant-header">
-              <div className="applicant-info">
-                <h4>{applicant.student?.name || 'Unknown Applicant'}</h4>
-                <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
-                <p className="position">{applicant.jobTitle}</p>
-              </div>
-              
-              <div className="applicant-score">
-                <div className="score-circle" style={{
-                  background: `conic-gradient(#00f7ff ${applicant.score * 3.6}deg, #e1e5e9 0deg)`
-                }}>
-                  <span>{applicant.score}%</span>
+        {qualifiedApplicants.map((applicant) => {
+          const applicantDetails = getApplicantDetails(applicant);
+          const profileCompletion = calculateProfileCompletion(applicantDetails);
+          
+          return (
+            <div key={applicant.id} className="applicant-card compact">
+              <div className="applicant-header">
+                <div className="applicant-info">
+                  <h4>{applicant.student?.name || 'Unknown Applicant'}</h4>
+                  <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
+                  <p className="position">{applicant.jobTitle}</p>
+                  
+                  {applicantDetails && (
+                    <div className="applicant-profile-summary">
+                      <span className="profile-completion">
+                        Profile: {profileCompletion}% complete
+                      </span>
+                      {applicantDetails.educationLevel && (
+                        <span className="education-level">
+                          🎓 {applicantDetails.educationLevel}
+                        </span>
+                      )}
+                      {applicantDetails.major && (
+                        <span className="major">
+                          📚 {applicantDetails.major}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className="score-level">Excellent Match</span>
+                
+                <div className="applicant-score">
+                  <div className="score-circle" style={{
+                    background: `conic-gradient(#00f7ff ${applicant.score * 3.6}deg, #e1e5e9 0deg)`
+                  }}>
+                    <span>{applicant.score}%</span>
+                  </div>
+                  <span className="score-level">Excellent Match</span>
+                </div>
               </div>
-            </div>
 
-            <div className="applicant-details">
-              <div className="detail-section">
-                <h4>Education</h4>
-                <p>{applicant.student?.educationLevel || 'Not specified'} in {applicant.student?.major || 'Not specified'}</p>
-              </div>
-              
-              {applicant.student?.skills && applicant.student.skills.length > 0 && (
-                <div className="detail-section">
-                  <h4>Skills</h4>
-                  <div className="skills-list">
-                    {applicant.student.skills.slice(0, 4).map((skill, index) => (
-                      <span key={index} className="skill-tag">{skill}</span>
-                    ))}
-                    {applicant.student.skills.length > 4 && (
-                      <span className="skill-tag">+{applicant.student.skills.length - 4} more</span>
+              {applicantDetails && (
+                <div className="applicant-details">
+                  <div className="detail-section">
+                    <h4>Education</h4>
+                    <p>
+                      {applicantDetails.educationLevel || 'Not specified'} 
+                      {applicantDetails.major && ` in ${applicantDetails.major}`}
+                    </p>
+                    {applicantDetails.highSchoolName && (
+                      <p className="high-school">
+                        🏫 {applicantDetails.highSchoolName}
+                        {applicantDetails.graduationYear && ` (${applicantDetails.graduationYear})`}
+                      </p>
                     )}
                   </div>
+                  
+                  {applicantDetails.skills && applicantDetails.skills.length > 0 && (
+                    <div className="detail-section">
+                      <h4>Skills</h4>
+                      <div className="skills-list">
+                        {applicantDetails.skills.slice(0, 4).map((skill, index) => (
+                          <span key={index} className="skill-tag">{skill}</span>
+                        ))}
+                        {applicantDetails.skills.length > 4 && (
+                          <span className="skill-tag">+{applicantDetails.skills.length - 4} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {applicantDetails.phone && (
+                    <div className="detail-section">
+                      <h4>Contact</h4>
+                      <p>📞 {applicantDetails.phone}</p>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
 
-            <div className="applicant-footer">
-              <div className="application-meta">
-                <span>Applied: {formatDate(applicant.appliedAt)}</span>
-              </div>
-              
-              <div className="applicant-actions">
-                <button 
-                  className="btn btn-primary btn-sm"
-                  onClick={() => handleViewApplication(applicant)}
-                >
-                  View Details
-                </button>
-                <button 
-                  className="btn btn-warning btn-sm"
-                  onClick={() => handleUpdateApplicationStatus(applicant.id, 'interview')}
-                >
-                  Schedule Interview
-                </button>
+              <div className="applicant-footer">
+                <div className="application-meta">
+                  <span>Applied: {formatDate(applicant.appliedAt)}</span>
+                </div>
+                
+                <div className="applicant-actions">
+                  <button 
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleViewApplication(applicant)}
+                  >
+                    View Details
+                  </button>
+                  <button 
+                    className="btn btn-warning btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(applicant.id, 'interview')}
+                  >
+                    Schedule Interview
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {qualifiedApplicants.length === 0 && (
@@ -771,46 +873,68 @@ const CompanyDashboard = ({ user: propUser }) => {
       <div className="applicants-list">
         {applications
           .filter(app => app.status === 'interview')
-          .map((applicant) => (
-          <div key={applicant.id} className="applicant-card">
-            <div className="applicant-header">
-              <div className="applicant-info">
-                <h3>{applicant.student?.name || 'Unknown Applicant'}</h3>
-                <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
-                <p className="position">{applicant.jobTitle}</p>
-              </div>
-              
-              <span className="status-badge interview">INTERVIEW</span>
-            </div>
+          .map((applicant) => {
+            const applicantDetails = getApplicantDetails(applicant);
+            
+            return (
+              <div key={applicant.id} className="applicant-card">
+                <div className="applicant-header">
+                  <div className="applicant-info">
+                    <h3>{applicant.student?.name || 'Unknown Applicant'}</h3>
+                    <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
+                    <p className="position">{applicant.jobTitle}</p>
+                    
+                    {applicantDetails && (
+                      <div className="applicant-profile-summary">
+                        {applicantDetails.educationLevel && (
+                          <span className="education-level">
+                            🎓 {applicantDetails.educationLevel}
+                          </span>
+                        )}
+                        {applicantDetails.major && (
+                          <span className="major">
+                            📚 {applicantDetails.major}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <span className="status-badge interview">INTERVIEW</span>
+                </div>
 
-            {applicant.student?.phone && (
-              <div className="applicant-meta">
-                <span>📞 {applicant.student.phone}</span>
-              </div>
-            )}
+                <div className="applicant-meta">
+                  {applicantDetails?.phone && (
+                    <span>📞 {applicantDetails.phone}</span>
+                  )}
+                  {applicantDetails?.address && (
+                    <span>📍 {applicantDetails.address}</span>
+                  )}
+                </div>
 
-            <div className="applicant-actions">
-              <button 
-                className="btn btn-success btn-sm"
-                onClick={() => handleUpdateApplicationStatus(applicant.id, 'approved')}
-              >
-                Approve
-              </button>
-              <button 
-                className="btn btn-danger btn-sm"
-                onClick={() => handleUpdateApplicationStatus(applicant.id, 'rejected')}
-              >
-                Reject
-              </button>
-              <button 
-                className="btn btn-primary btn-sm"
-                onClick={() => handleViewApplication(applicant)}
-              >
-                View Details
-              </button>
-            </div>
-          </div>
-        ))}
+                <div className="applicant-actions">
+                  <button 
+                    className="btn btn-success btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(applicant.id, 'approved')}
+                  >
+                    Approve
+                  </button>
+                  <button 
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(applicant.id, 'rejected')}
+                  >
+                    Reject
+                  </button>
+                  <button 
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleViewApplication(applicant)}
+                  >
+                    View Details
+                  </button>
+                </div>
+              </div>
+            );
+          })}
       </div>
 
       {applications.filter(app => app.status === 'interview').length === 0 && (
@@ -1201,42 +1325,123 @@ const CompanyDashboard = ({ user: propUser }) => {
               <div className="form-section">
                 <h3>Applicant Information</h3>
                 
-                <div className="info-grid">
-                  <div className="info-item">
-                    <label>Name</label>
-                    <div className="info-value">
-                      {selectedApplication.student?.name || 'Not available'}
-                    </div>
-                  </div>
+                {(() => {
+                  const applicantDetails = getApplicantDetails(selectedApplication);
+                  const profileCompletion = calculateProfileCompletion(applicantDetails);
                   
-                  <div className="info-item">
-                    <label>Email</label>
-                    <div className="info-value">
-                      {selectedApplication.student?.email || 'Not available'}
+                  return (
+                    <div className="info-grid">
+                      <div className="info-item">
+                        <label>Name</label>
+                        <div className="info-value">
+                          {applicantDetails?.name || selectedApplication.student?.name || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Email</label>
+                        <div className="info-value">
+                          {applicantDetails?.email || selectedApplication.student?.email || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Phone</label>
+                        <div className="info-value">
+                          {applicantDetails?.phone || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Profile Completion</label>
+                        <div className="info-value">
+                          <div className="completion-bar">
+                            <div 
+                              className="completion-fill" 
+                              style={{width: `${profileCompletion}%`}}
+                            ></div>
+                            <span className="completion-text">{profileCompletion}%</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Student Type</label>
+                        <div className="info-value">
+                          {applicantDetails?.studentType === 'highschool' ? '🏫 High School Student' : 
+                           applicantDetails?.studentType === 'college' ? '🎓 College Graduate' : 
+                           'Not specified'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Education Level</label>
+                        <div className="info-value">
+                          {applicantDetails?.educationLevel || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Major/Field</label>
+                        <div className="info-value">
+                          {applicantDetails?.major || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      {applicantDetails?.highSchoolName && (
+                        <div className="info-item">
+                          <label>High School</label>
+                          <div className="info-value">
+                            {applicantDetails.highSchoolName}
+                            {applicantDetails.graduationYear && ` (Graduation: ${applicantDetails.graduationYear})`}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="info-item full-width">
+                        <label>Address</label>
+                        <div className="info-value">
+                          {applicantDetails?.address || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Date of Birth</label>
+                        <div className="info-value">
+                          {applicantDetails?.dateOfBirth ? formatDate(applicantDetails.dateOfBirth) : 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Gender</label>
+                        <div className="info-value">
+                          {applicantDetails?.gender || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>Nationality</label>
+                        <div className="info-value">
+                          {applicantDetails?.nationality || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item">
+                        <label>ID Number</label>
+                        <div className="info-value">
+                          {applicantDetails?.idNumber || 'Not available'}
+                        </div>
+                      </div>
+                      
+                      <div className="info-item full-width">
+                        <label>Emergency Contact</label>
+                        <div className="info-value">
+                          {applicantDetails?.emergencyContact || 'Not available'}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="info-item">
-                    <label>Phone</label>
-                    <div className="info-value">
-                      {selectedApplication.student?.phone || 'Not available'}
-                    </div>
-                  </div>
-                  
-                  <div className="info-item">
-                    <label>Education Level</label>
-                    <div className="info-value">
-                      {selectedApplication.student?.educationLevel || 'Not available'}
-                    </div>
-                  </div>
-                  
-                  <div className="info-item">
-                    <label>Major</label>
-                    <div className="info-value">
-                      {selectedApplication.student?.major || 'Not available'}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
 
               <div className="form-section">
