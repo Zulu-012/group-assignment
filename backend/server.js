@@ -424,8 +424,8 @@ const app = express();
 
 // Enhanced CORS configuration for Render - UPDATED WITH FRONTEND DOMAIN
 const allowedOrigins = [
-  'https://group-assignment-2-ypxs.onrender.com',
-  'https://group-assignment-12.onrender.com', // ADDED: Your frontend domain
+  'https://group-assignment-94en.onrender.com',
+  'https://group-assignment-1-lcme.onrender.com', // ADDED: Your frontend domain
   'http://localhost:3000',
   'http://localhost:5173',
   process.env.FRONTEND_URL
