@@ -1,4 +1,4 @@
-// CompanyDashboard.js - UPDATED VERSION WITH ENHANCEMENTS
+// CompanyDashboard.js - FULLY UPDATED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -40,7 +40,9 @@ import {
   CardActions,
   Avatar,
   LinearProgress,
-  Tooltip
+  Tooltip,
+  alpha,
+  useTheme
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -56,7 +58,11 @@ import {
   Phone as PhoneIcon,
   School as SchoolIcon,
   LocationOn as LocationIcon,
-  AttachMoney as MoneyIcon
+  AttachMoney as MoneyIcon,
+  Download as DownloadIcon,
+  FilterList as FilterIcon,
+  Search as SearchIcon,
+  Notifications as NotificationsIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -65,6 +71,7 @@ const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com';
 
 const CompanyDashboard = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -78,6 +85,8 @@ const CompanyDashboard = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [editJobOpen, setEditJobOpen] = useState(false);
   const [jobToEdit, setJobToEdit] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // New job form state
   const [newJob, setNewJob] = useState({
@@ -100,7 +109,8 @@ const CompanyDashboard = () => {
     totalApplications: 0,
     qualifiedApplicants: 0,
     hiredApplicants: 0,
-    interviewScheduled: 0
+    interviewScheduled: 0,
+    pendingReview: 0
   });
 
   const token = localStorage.getItem('token');
@@ -163,7 +173,8 @@ const CompanyDashboard = () => {
         totalApplications: applicationsList.length,
         qualifiedApplicants: qualifiedData.applications?.length || 0,
         hiredApplicants: applicationsList.filter(app => app.status === 'hired').length,
-        interviewScheduled: applicationsList.filter(app => app.status === 'interview').length
+        interviewScheduled: applicationsList.filter(app => app.status === 'interview').length,
+        pendingReview: applicationsList.filter(app => app.status === 'pending').length
       });
 
     } catch (err) {
@@ -362,6 +373,17 @@ const CompanyDashboard = () => {
     setJobToEdit(null);
   };
 
+  // Filter applications based on search and status
+  const filteredApplications = applications.filter(app => {
+    const matchesSearch = searchTerm === '' || 
+      app.student?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.jobTitle?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
   // Tab panel component
   const TabPanel = ({ children, value, index, ...other }) => (
     <div
@@ -399,7 +421,7 @@ const CompanyDashboard = () => {
   if (user.role !== 'company') {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <Alert severity="error">
+        <Alert severity="error" sx={{ borderRadius: 2, boxShadow: 1 }}>
           Access Denied. This dashboard is only available for company accounts.
         </Alert>
       </Box>
@@ -409,9 +431,12 @@ const CompanyDashboard = () => {
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px" flexDirection="column">
-        <CircularProgress />
-        <Typography variant="body1" sx={{ mt: 2 }}>
+        <CircularProgress size={60} thickness={4} />
+        <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary' }}>
           Loading company dashboard...
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+          Preparing your recruitment data
         </Typography>
       </Box>
     );
@@ -419,16 +444,33 @@ const CompanyDashboard = () => {
 
   return (
     <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
-      <AppBar position="static" color="primary" elevation={2}>
+      <AppBar 
+        position="static" 
+        color="primary" 
+        elevation={1}
+        sx={{ 
+          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.dark, 0.9)} 100%)`,
+        }}
+      >
         <Toolbar>
-          <BusinessIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            {user.companyName || user.name} - Dashboard
-          </Typography>
+          <BusinessIcon sx={{ mr: 2, fontSize: 32 }} />
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
+              {user.companyName || user.name} - Company Dashboard
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9 }}>
+              Recruitment Management Portal
+            </Typography>
+          </Box>
           <Button 
             color="inherit" 
             onClick={handleLogout}
             startIcon={<BusinessIcon />}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              fontWeight: 600
+            }}
           >
             Logout
           </Button>
@@ -436,98 +478,264 @@ const CompanyDashboard = () => {
       </AppBar>
 
       {/* Statistics Cards */}
-      <Container maxWidth="xl" sx={{ mt: 4 }}>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ 
+          fontWeight: 700, 
+          color: 'text.primary',
+          mb: 4,
+          background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+          backgroundClip: 'text',
+          WebkitBackgroundClip: 'text',
+          color: 'transparent',
+        }}>
+          Recruitment Overview
+        </Typography>
+        
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={2}>
-              <CardContent>
-                <Box display="flex" alignItems="center">
-                  <WorkIcon color="primary" sx={{ mr: 2, fontSize: 40 }} />
+          <Grid item xs={12} sm={6} md={2.4}>
+            <Card 
+              elevation={2}
+              sx={{
+                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.dark, 0.8)} 100%)`,
+                color: 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
                   <Box>
-                    <Typography color="textSecondary" gutterBottom variant="overline">
+                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
                       Active Jobs
                     </Typography>
-                    <Typography variant="h4">{stats.totalJobs}</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.totalJobs}</Typography>
                   </Box>
+                  <WorkIcon sx={{ fontSize: 40, opacity: 0.8 }} />
                 </Box>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={2}>
-              <CardContent>
-                <Box display="flex" alignItems="center">
-                  <PeopleIcon color="secondary" sx={{ mr: 2, fontSize: 40 }} />
+          
+          <Grid item xs={12} sm={6} md={2.4}>
+            <Card 
+              elevation={2}
+              sx={{
+                background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${alpha(theme.palette.secondary.dark, 0.8)} 100%)`,
+                color: 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
                   <Box>
-                    <Typography color="textSecondary" gutterBottom variant="overline">
+                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
                       Applications
                     </Typography>
-                    <Typography variant="h4">{stats.totalApplications}</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.totalApplications}</Typography>
                   </Box>
+                  <PeopleIcon sx={{ fontSize: 40, opacity: 0.8 }} />
                 </Box>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={2}>
-              <CardContent>
-                <Box display="flex" alignItems="center">
-                  <TrendingUpIcon color="success" sx={{ mr: 2, fontSize: 40 }} />
+          
+          <Grid item xs={12} sm={6} md={2.4}>
+            <Card 
+              elevation={2}
+              sx={{
+                background: `linear-gradient(135deg, #00c853 0%, ${alpha('#00c853', 0.8)} 100%)`,
+                color: 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
                   <Box>
-                    <Typography color="textSecondary" gutterBottom variant="overline">
+                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
                       Qualified
                     </Typography>
-                    <Typography variant="h4">{stats.qualifiedApplicants}</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.qualifiedApplicants}</Typography>
                   </Box>
+                  <TrendingUpIcon sx={{ fontSize: 40, opacity: 0.8 }} />
                 </Box>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={2}>
-              <CardContent>
-                <Box display="flex" alignItems="center">
-                  <ScheduleIcon color="warning" sx={{ mr: 2, fontSize: 40 }} />
+          
+          <Grid item xs={12} sm={6} md={2.4}>
+            <Card 
+              elevation={2}
+              sx={{
+                background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${alpha(theme.palette.warning.dark, 0.8)} 100%)`,
+                color: 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
                   <Box>
-                    <Typography color="textSecondary" gutterBottom variant="overline">
+                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
                       Interviews
                     </Typography>
-                    <Typography variant="h4">{stats.interviewScheduled}</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.interviewScheduled}</Typography>
                   </Box>
+                  <ScheduleIcon sx={{ fontSize: 40, opacity: 0.8 }} />
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={2.4}>
+            <Card 
+              elevation={2}
+              sx={{
+                background: `linear-gradient(135deg, #9c27b0 0%, ${alpha('#9c27b0', 0.8)} 100%)`,
+                color: 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                  <Box>
+                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
+                      Pending Review
+                    </Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.pendingReview}</Typography>
+                  </Box>
+                  <NotificationsIcon sx={{ fontSize: 40, opacity: 0.8 }} />
                 </Box>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
+      </Container>
 
-        {/* Tabs */}
-        <Card sx={{ mt: 4 }} elevation={2}>
+      {/* Main Content */}
+      <Container maxWidth="xl" sx={{ mt: 2 }}>
+        <Card 
+          elevation={2}
+          sx={{
+            borderRadius: 3,
+            overflow: 'hidden',
+            background: 'white',
+          }}
+        >
           <Tabs
             value={activeTab}
             onChange={(e, newValue) => {
               setActiveTab(newValue);
               setSelectedJob(null);
+              setSearchTerm('');
+              setStatusFilter('all');
             }}
             indicatorColor="primary"
             textColor="primary"
             variant="scrollable"
             scrollButtons="auto"
+            sx={{
+              borderBottom: 1,
+              borderColor: 'divider',
+              '& .MuiTab-root': {
+                fontWeight: 600,
+                fontSize: '0.95rem',
+                py: 2,
+                minHeight: 64,
+              }
+            }}
           >
-            <Tab label="Job Postings" />
-            <Tab label="All Applications" />
-            <Tab label="Qualified Applicants" />
-            <Tab label={`Interviews (${stats.interviewScheduled})`} />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <WorkIcon sx={{ mr: 1, fontSize: 20 }} />
+                  Job Postings
+                </Box>
+              } 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <PeopleIcon sx={{ mr: 1, fontSize: 20 }} />
+                  All Applications
+                  {stats.totalApplications > 0 && (
+                    <Chip 
+                      label={stats.totalApplications} 
+                      size="small" 
+                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
+              } 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <TrendingUpIcon sx={{ mr: 1, fontSize: 20 }} />
+                  Qualified Applicants
+                  {stats.qualifiedApplicants > 0 && (
+                    <Chip 
+                      label={stats.qualifiedApplicants} 
+                      size="small" 
+                      color="success"
+                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
+              } 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <ScheduleIcon sx={{ mr: 1, fontSize: 20 }} />
+                  Interviews
+                  {stats.interviewScheduled > 0 && (
+                    <Chip 
+                      label={stats.interviewScheduled} 
+                      size="small" 
+                      color="warning"
+                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
+              } 
+            />
           </Tabs>
 
           {/* Job Postings Tab */}
           <TabPanel value={activeTab} index={0}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-              <Typography variant="h5">Job Postings</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                Job Postings Management
+              </Typography>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => setCreateJobOpen(true)}
-                sx={{ borderRadius: 2 }}
+                sx={{ 
+                  borderRadius: 2,
+                  px: 3,
+                  py: 1,
+                  fontWeight: 600,
+                  background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                }}
               >
                 Create Job Posting
               </Button>
@@ -543,21 +751,24 @@ const CompanyDashboard = () => {
                       display: 'flex',
                       flexDirection: 'column',
                       transition: 'all 0.3s ease',
+                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
                       '&:hover': {
-                        boxShadow: 3,
-                        transform: 'translateY(-2px)'
+                        boxShadow: 6,
+                        transform: 'translateY(-4px)',
+                        borderColor: theme.palette.primary.light,
                       }
                     }}
                   >
-                    <CardContent sx={{ flexGrow: 1 }}>
+                    <CardContent sx={{ flexGrow: 1, p: 3 }}>
                       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, flex: 1 }}>
+                        <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, flex: 1, color: 'text.primary' }}>
                           {job.title}
                         </Typography>
                         <Chip 
                           label={job.status || 'active'} 
                           color={getStatusColor(job.status)}
                           size="small" 
+                          sx={{ fontWeight: 600 }}
                         />
                       </Box>
                       
@@ -570,7 +781,7 @@ const CompanyDashboard = () => {
                       
                       <Box display="flex" alignItems="center" mb={1}>
                         <WorkIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="textSecondary" textTransform="capitalize">
                           {job.jobType}
                         </Typography>
                       </Box>
@@ -582,29 +793,42 @@ const CompanyDashboard = () => {
                         </Typography>
                       </Box>
 
-                      <Typography variant="body2" paragraph sx={{ color: 'text.secondary' }}>
+                      <Typography variant="body2" paragraph sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
                         {job.description && job.description.length > 120 
                           ? `${job.description.substring(0, 120)}...` 
                           : job.description || 'No description provided'}
                       </Typography>
 
                       <Box mb={2}>
-                        <Typography variant="caption" color="textSecondary" display="block">
-                          Applications: {applications.filter(app => app.jobId === job.id).length}
-                        </Typography>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                          <Typography variant="caption" color="textSecondary">
+                            Applications: {applications.filter(app => app.jobId === job.id).length}
+                          </Typography>
+                          <Typography variant="caption" color="textSecondary">
+                            {Math.min((applications.filter(app => app.jobId === job.id).length / 10) * 100, 100)}%
+                          </Typography>
+                        </Box>
                         <LinearProgress 
                           variant="determinate" 
                           value={Math.min((applications.filter(app => app.jobId === job.id).length / 10) * 100, 100)}
-                          sx={{ mt: 0.5 }}
+                          sx={{ 
+                            height: 6, 
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                            }
+                          }}
                         />
                       </Box>
 
-                      <Typography variant="caption" color="textSecondary" display="block">
+                      <Typography variant="caption" color="textSecondary" display="block" sx={{ fontStyle: 'italic' }}>
                         Deadline: {formatDate(job.deadline)}
                       </Typography>
                     </CardContent>
                     
-                    <CardActions sx={{ p: 2, pt: 0 }}>
+                    <CardActions sx={{ p: 2, pt: 0, gap: 1 }}>
                       <Button 
                         size="small" 
                         startIcon={<ViewIcon />}
@@ -612,13 +836,15 @@ const CompanyDashboard = () => {
                           setSelectedJob(job);
                           setActiveTab(1);
                         }}
+                        sx={{ borderRadius: 1 }}
                       >
-                        View Applications
+                        View Apps
                       </Button>
                       <Button 
                         size="small" 
                         startIcon={<EditIcon />}
                         onClick={() => handleEditJob(job)}
+                        sx={{ borderRadius: 1 }}
                       >
                         Edit
                       </Button>
@@ -627,6 +853,7 @@ const CompanyDashboard = () => {
                         color="error"
                         startIcon={<DeleteIcon />}
                         onClick={() => handleDeleteJob(job.id)}
+                        sx={{ borderRadius: 1 }}
                       >
                         Delete
                       </Button>
@@ -637,20 +864,27 @@ const CompanyDashboard = () => {
             </Grid>
 
             {jobs.length === 0 && (
-              <Box textAlign="center" py={6}>
-                <WorkIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="textSecondary">
+              <Box textAlign="center" py={8}>
+                <WorkIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                <Typography variant="h5" color="textSecondary" gutterBottom>
                   No job postings yet
                 </Typography>
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 1, mb: 3 }}>
-                  Create your first job posting to start receiving applications
+                <Typography variant="body1" color="textSecondary" sx={{ mt: 1, mb: 4, maxWidth: 400, mx: 'auto' }}>
+                  Create your first job posting to start receiving applications from qualified candidates
                 </Typography>
                 <Button
                   variant="contained"
+                  size="large"
                   startIcon={<AddIcon />}
                   onClick={() => setCreateJobOpen(true)}
+                  sx={{ 
+                    borderRadius: 2,
+                    px: 4,
+                    py: 1.5,
+                    fontWeight: 600,
+                  }}
                 >
-                  Create Job Posting
+                  Create Your First Job Posting
                 </Button>
               </Box>
             )}
@@ -659,7 +893,7 @@ const CompanyDashboard = () => {
           {/* All Applications Tab */}
           <TabPanel value={activeTab} index={1}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-              <Typography variant="h5">
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
                 Job Applications
                 {selectedJob && (
                   <Chip 
@@ -667,40 +901,88 @@ const CompanyDashboard = () => {
                     onDelete={() => setSelectedJob(null)}
                     sx={{ ml: 2 }}
                     color="primary"
+                    variant="outlined"
                   />
                 )}
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Total: {applications.filter(app => !selectedJob || app.jobId === selectedJob.id).length}
-              </Typography>
+              
+              <Box display="flex" gap={2} alignItems="center">
+                <TextField
+                  size="small"
+                  placeholder="Search applicants..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  InputProps={{
+                    startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                  }}
+                  sx={{ width: 200 }}
+                />
+                
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    label="Status"
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <MenuItem value="all">All Status</MenuItem>
+                    <MenuItem value="pending">Pending</MenuItem>
+                    <MenuItem value="approved">Approved</MenuItem>
+                    <MenuItem value="rejected">Rejected</MenuItem>
+                    <MenuItem value="interview">Interview</MenuItem>
+                    <MenuItem value="hired">Hired</MenuItem>
+                  </Select>
+                </FormControl>
+                
+                <Typography variant="body2" color="textSecondary" sx={{ fontWeight: 600 }}>
+                  Total: {filteredApplications.length}
+                </Typography>
+              </Box>
             </Box>
 
-            <TableContainer component={Paper} elevation={1}>
+            <TableContainer 
+              component={Paper} 
+              elevation={0}
+              sx={{ 
+                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                borderRadius: 2,
+              }}
+            >
               <Table>
-                <TableHead sx={{ bgcolor: 'grey.50' }}>
+                <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
                   <TableRow>
-                    <TableCell>Applicant</TableCell>
-                    <TableCell>Job Title</TableCell>
-                    <TableCell align="center">Score</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Applied Date</TableCell>
-                    <TableCell align="center">Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Applicant</TableCell>
+                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Job Title</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700, py: 2 }}>Match Score</TableCell>
+                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Applied Date</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700, py: 2 }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {applications
-                    .filter(app => !selectedJob || app.jobId === selectedJob.id)
-                    .map((application) => (
+                  {filteredApplications.map((application) => (
                     <TableRow 
                       key={application.id}
                       sx={{ 
                         '&:last-child td, &:last-child th': { border: 0 },
-                        bgcolor: application.status === 'hired' ? 'success.light' : 'transparent'
+                        transition: 'background-color 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.primary.main, 0.02),
+                        },
+                        bgcolor: application.status === 'hired' ? alpha('#4caf50', 0.05) : 'transparent'
                       }}
                     >
-                      <TableCell>
+                      <TableCell sx={{ py: 2 }}>
                         <Box display="flex" alignItems="center">
-                          <Avatar sx={{ width: 32, height: 32, mr: 2, bgcolor: 'primary.main' }}>
+                          <Avatar 
+                            sx={{ 
+                              width: 40, 
+                              height: 40, 
+                              mr: 2, 
+                              bgcolor: theme.palette.primary.main,
+                              fontWeight: 600 
+                            }}
+                          >
                             {application.student?.name?.charAt(0) || 'A'}
                           </Avatar>
                           <Box>
@@ -713,25 +995,38 @@ const CompanyDashboard = () => {
                           </Box>
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
+                      <TableCell sx={{ py: 2 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {application.jobTitle}
                         </Typography>
                       </TableCell>
-                      <TableCell align="center">
+                      <TableCell align="center" sx={{ py: 2 }}>
                         <Tooltip title={`Match score: ${application.score || 0}%`}>
-                          <Chip 
-                            label={`${application.score || 0}%`}
-                            color={
-                              application.score >= 80 ? 'success' :
-                              application.score >= 60 ? 'warning' : 'default'
-                            }
-                            size="small"
-                            variant={application.score >= 70 ? 'filled' : 'outlined'}
-                          />
+                          <Box>
+                            <Chip 
+                              label={`${application.score || 0}%`}
+                              color={
+                                application.score >= 80 ? 'success' :
+                                application.score >= 60 ? 'warning' : 'default'
+                              }
+                              size="small"
+                              variant={application.score >= 70 ? 'filled' : 'outlined'}
+                              sx={{ fontWeight: 600 }}
+                            />
+                            {application.score >= 70 && (
+                              <TrendingUpIcon 
+                                sx={{ 
+                                  fontSize: 16, 
+                                  ml: 0.5, 
+                                  color: 'success.main',
+                                  verticalAlign: 'middle' 
+                                }} 
+                              />
+                            )}
+                          </Box>
                         </Tooltip>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ py: 2 }}>
                         <Chip 
                           label={application.status?.toUpperCase()}
                           color={
@@ -741,18 +1036,26 @@ const CompanyDashboard = () => {
                             application.status === 'hired' ? 'primary' : 'default'
                           }
                           size="small"
-                          sx={{ fontWeight: 600 }}
+                          sx={{ fontWeight: 600, minWidth: 80 }}
                         />
                       </TableCell>
-                      <TableCell>
-                        {application.appliedAt ? formatDate(application.appliedAt) : 'Unknown'}
+                      <TableCell sx={{ py: 2 }}>
+                        <Typography variant="body2">
+                          {application.appliedAt ? formatDate(application.appliedAt) : 'Unknown'}
+                        </Typography>
                       </TableCell>
-                      <TableCell align="center">
+                      <TableCell align="center" sx={{ py: 2 }}>
                         <Tooltip title="View application details">
                           <IconButton
                             size="small"
                             onClick={() => handleViewApplication(application)}
                             color="primary"
+                            sx={{ 
+                              borderRadius: 1,
+                              '&:hover': {
+                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              }
+                            }}
                           >
                             <ViewIcon />
                           </IconButton>
@@ -764,22 +1067,39 @@ const CompanyDashboard = () => {
               </Table>
             </TableContainer>
 
-            {applications.filter(app => !selectedJob || app.jobId === selectedJob.id).length === 0 && (
-              <Box textAlign="center" py={6}>
-                <PeopleIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="textSecondary">
+            {filteredApplications.length === 0 && (
+              <Box textAlign="center" py={8}>
+                <PeopleIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                <Typography variant="h5" color="textSecondary" gutterBottom>
                   No applications found
                 </Typography>
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                  {selectedJob ? `No applications for "${selectedJob.title}" yet` : 'No applications received yet'}
+                <Typography variant="body1" color="textSecondary" sx={{ mt: 1 }}>
+                  {selectedJob 
+                    ? `No applications for "${selectedJob.title}" yet` 
+                    : searchTerm || statusFilter !== 'all'
+                    ? 'No applications match your search criteria'
+                    : 'No applications received yet'
+                  }
                 </Typography>
+                {(searchTerm || statusFilter !== 'all') && (
+                  <Button
+                    variant="outlined"
+                    sx={{ mt: 2 }}
+                    onClick={() => {
+                      setSearchTerm('');
+                      setStatusFilter('all');
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
               </Box>
             )}
           </TabPanel>
 
           {/* Qualified Applicants Tab */}
           <TabPanel value={activeTab} index={2}>
-            <Typography variant="h5" gutterBottom>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, color: 'text.primary', mb: 3 }}>
               Qualified Applicants (Score ≥ 70%)
             </Typography>
 
@@ -790,19 +1110,29 @@ const CompanyDashboard = () => {
                     variant="outlined"
                     sx={{
                       transition: 'all 0.3s ease',
+                      border: `2px solid ${alpha('#00c853', 0.1)}`,
                       '&:hover': {
-                        boxShadow: 3,
-                        borderColor: 'primary.main'
+                        boxShadow: 4,
+                        transform: 'translateY(-4px)',
+                        borderColor: '#00c853',
                       }
                     }}
                   >
-                    <CardContent>
+                    <CardContent sx={{ p: 3 }}>
                       <Box display="flex" alignItems="flex-start" mb={2}>
-                        <Avatar sx={{ width: 48, height: 48, mr: 2, bgcolor: 'success.main' }}>
+                        <Avatar 
+                          sx={{ 
+                            width: 52, 
+                            height: 52, 
+                            mr: 2, 
+                            bgcolor: 'success.main',
+                            fontWeight: 600 
+                          }}
+                        >
                           {applicant.student?.name?.charAt(0) || 'A'}
                         </Avatar>
                         <Box flex={1}>
-                          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                          <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
                             {applicant.student?.name || 'Unknown Applicant'}
                           </Typography>
                           <Typography color="textSecondary" variant="body2">
@@ -812,8 +1142,7 @@ const CompanyDashboard = () => {
                         <Chip 
                           label={`${applicant.score}%`}
                           color="success"
-                          size="small"
-                          sx={{ fontWeight: 600 }}
+                          sx={{ fontWeight: 700 }}
                         />
                       </Box>
                       
@@ -831,30 +1160,38 @@ const CompanyDashboard = () => {
                         </Typography>
                       </Box>
 
-                      <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
-                        {applicant.student?.skills?.slice(0, 3).map((skill, index) => (
-                          <Chip 
-                            key={index}
-                            label={skill}
-                            size="small"
-                            variant="outlined"
-                          />
-                        ))}
-                        {applicant.student?.skills?.length > 3 && (
-                          <Chip 
-                            label={`+${applicant.student.skills.length - 3} more`}
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
-                      </Box>
+                      {applicant.student?.skills && applicant.student.skills.length > 0 && (
+                        <Box mb={2}>
+                          <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
+                            KEY SKILLS:
+                          </Typography>
+                          <Box display="flex" gap={0.5} flexWrap="wrap">
+                            {applicant.student.skills.slice(0, 4).map((skill, index) => (
+                              <Chip 
+                                key={index}
+                                label={skill}
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                              />
+                            ))}
+                            {applicant.student.skills.length > 4 && (
+                              <Chip 
+                                label={`+${applicant.student.skills.length - 4} more`}
+                                size="small"
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                      )}
 
-                      <Box mt={2}>
+                      <Box mt={2} display="flex" gap={1} flexWrap="wrap">
                         <Button
                           variant="outlined"
                           size="small"
                           onClick={() => handleViewApplication(applicant)}
-                          sx={{ mr: 1, mb: 1 }}
+                          sx={{ borderRadius: 1 }}
                         >
                           View Details
                         </Button>
@@ -863,9 +1200,12 @@ const CompanyDashboard = () => {
                           size="small"
                           startIcon={<ScheduleIcon />}
                           onClick={() => handleUpdateApplicationStatus(applicant.id, 'interview')}
-                          sx={{ mb: 1 }}
+                          sx={{ 
+                            borderRadius: 1,
+                            background: `linear-gradient(45deg, ${theme.palette.warning.main}, ${theme.palette.warning.dark})`,
+                          }}
                         >
-                          Interview
+                          Schedule Interview
                         </Button>
                       </Box>
                     </CardContent>
@@ -875,13 +1215,13 @@ const CompanyDashboard = () => {
             </Grid>
 
             {qualifiedApplicants.length === 0 && (
-              <Box textAlign="center" py={6}>
-                <TrendingUpIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="textSecondary">
+              <Box textAlign="center" py={8}>
+                <TrendingUpIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                <Typography variant="h5" color="textSecondary" gutterBottom>
                   No qualified applicants yet
                 </Typography>
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                  Qualified applicants will appear here automatically when they score 70% or higher
+                <Typography variant="body1" color="textSecondary" sx={{ mt: 1, mb: 4, maxWidth: 500, mx: 'auto' }}>
+                  Qualified applicants will appear here automatically when they score 70% or higher based on skills, education, and experience matching.
                 </Typography>
               </Box>
             )}
@@ -889,7 +1229,7 @@ const CompanyDashboard = () => {
 
           {/* Interviews Tab */}
           <TabPanel value={activeTab} index={3}>
-            <Typography variant="h5" gutterBottom>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, color: 'text.primary', mb: 3 }}>
               Interview Scheduling ({stats.interviewScheduled})
             </Typography>
 
@@ -898,14 +1238,28 @@ const CompanyDashboard = () => {
                 .filter(app => app.status === 'interview')
                 .map((applicant) => (
                 <Grid item xs={12} md={6} key={applicant.id}>
-                  <Card variant="outlined">
-                    <CardContent>
+                  <Card 
+                    variant="outlined"
+                    sx={{
+                      border: `2px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+                      background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.05)} 0%, ${alpha(theme.palette.warning.light, 0.02)} 100%)`,
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
                       <Box display="flex" alignItems="center" mb={2}>
-                        <Avatar sx={{ width: 40, height: 40, mr: 2, bgcolor: 'warning.main' }}>
+                        <Avatar 
+                          sx={{ 
+                            width: 48, 
+                            height: 48, 
+                            mr: 2, 
+                            bgcolor: 'warning.main',
+                            fontWeight: 600 
+                          }}
+                        >
                           {applicant.student?.name?.charAt(0) || 'A'}
                         </Avatar>
                         <Box flex={1}>
-                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
                             {applicant.student?.name || 'Unknown Applicant'}
                           </Typography>
                           <Typography color="textSecondary" variant="body2">
@@ -915,7 +1269,7 @@ const CompanyDashboard = () => {
                         <Chip 
                           label="INTERVIEW"
                           color="warning"
-                          size="small"
+                          sx={{ fontWeight: 700 }}
                         />
                       </Box>
 
@@ -935,12 +1289,13 @@ const CompanyDashboard = () => {
                         </Box>
                       )}
 
-                      <Box display="flex" gap={1} mt={2}>
+                      <Box display="flex" gap={1} mt={2} flexWrap="wrap">
                         <Button
                           variant="contained"
                           size="small"
                           color="success"
                           onClick={() => handleUpdateApplicationStatus(applicant.id, 'approved')}
+                          sx={{ borderRadius: 1, fontWeight: 600 }}
                         >
                           Approve
                         </Button>
@@ -949,6 +1304,7 @@ const CompanyDashboard = () => {
                           size="small"
                           color="error"
                           onClick={() => handleUpdateApplicationStatus(applicant.id, 'rejected')}
+                          sx={{ borderRadius: 1 }}
                         >
                           Reject
                         </Button>
@@ -956,6 +1312,7 @@ const CompanyDashboard = () => {
                           variant="outlined"
                           size="small"
                           onClick={() => handleViewApplication(applicant)}
+                          sx={{ borderRadius: 1 }}
                         >
                           View Details
                         </Button>
@@ -967,14 +1324,21 @@ const CompanyDashboard = () => {
             </Grid>
 
             {applications.filter(app => app.status === 'interview').length === 0 && (
-              <Box textAlign="center" py={6}>
-                <ScheduleIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="textSecondary">
+              <Box textAlign="center" py={8}>
+                <ScheduleIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                <Typography variant="h5" color="textSecondary" gutterBottom>
                   No interviews scheduled
                 </Typography>
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                  Schedule interviews from the Qualified Applicants tab
+                <Typography variant="body1" color="textSecondary" sx={{ mt: 1, mb: 4 }}>
+                  Schedule interviews from the Qualified Applicants tab to see them here.
                 </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setActiveTab(2)}
+                  sx={{ borderRadius: 2 }}
+                >
+                  View Qualified Applicants
+                </Button>
               </Box>
             )}
           </TabPanel>
@@ -982,14 +1346,27 @@ const CompanyDashboard = () => {
       </Container>
 
       {/* Create Job Dialog */}
-      <Dialog open={createJobOpen} onClose={handleCloseCreateJob} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+      <Dialog 
+        open={createJobOpen} 
+        onClose={handleCloseCreateJob} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
             Create New Job Posting
           </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Fill in the details to create a new job opportunity
+          </Typography>
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
+        <DialogContent sx={{ mt: 2 }}>
+          <Grid container spacing={2}>
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -1107,13 +1484,22 @@ const CompanyDashboard = () => {
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleCloseCreateJob}>Cancel</Button>
+        <DialogActions sx={{ p: 3, gap: 1 }}>
+          <Button 
+            onClick={handleCloseCreateJob}
+            sx={{ borderRadius: 1 }}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={handleCreateJob} 
             variant="contained"
             disabled={!newJob.title || !newJob.description || !newJob.location || !newJob.salary || !newJob.deadline}
-            sx={{ minWidth: 120 }}
+            sx={{ 
+              minWidth: 120,
+              borderRadius: 1,
+              fontWeight: 600,
+            }}
           >
             Create Job
           </Button>
@@ -1121,15 +1507,25 @@ const CompanyDashboard = () => {
       </Dialog>
 
       {/* Edit Job Dialog */}
-      <Dialog open={editJobOpen} onClose={handleCloseEditJob} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+      <Dialog 
+        open={editJobOpen} 
+        onClose={handleCloseEditJob} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
             Edit Job Posting
           </Typography>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ mt: 2 }}>
           {jobToEdit && (
-            <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid container spacing={2}>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -1231,12 +1627,21 @@ const CompanyDashboard = () => {
             </Grid>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleCloseEditJob}>Cancel</Button>
+        <DialogActions sx={{ p: 3, gap: 1 }}>
+          <Button 
+            onClick={handleCloseEditJob}
+            sx={{ borderRadius: 1 }}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={handleUpdateJob} 
             variant="contained"
-            sx={{ minWidth: 120 }}
+            sx={{ 
+              minWidth: 120,
+              borderRadius: 1,
+              fontWeight: 600,
+            }}
           >
             Update Job
           </Button>
@@ -1244,29 +1649,40 @@ const CompanyDashboard = () => {
       </Dialog>
 
       {/* View Application Dialog */}
-      <Dialog open={viewApplicationOpen} onClose={handleCloseViewApplication} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
+      <Dialog 
+        open={viewApplicationOpen} 
+        onClose={handleCloseViewApplication} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            maxHeight: '90vh',
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
           <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
               Application Details
             </Typography>
             {selectedApplication && (
               <Chip 
                 label={`Score: ${selectedApplication.score}%`}
                 color={selectedApplication.score >= 70 ? 'success' : 'default'}
-                sx={{ fontWeight: 600 }}
+                sx={{ fontWeight: 700 }}
               />
             )}
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ mt: 2 }}>
           {selectedApplication && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
                   Applicant Information
                 </Typography>
-                <List dense sx={{ bgcolor: 'grey.50', borderRadius: 1, p: 2 }}>
+                <List dense sx={{ bgcolor: 'grey.50', borderRadius: 2, p: 2 }}>
                   <ListItem>
                     <ListItemText 
                       primary="Name" 
@@ -1307,7 +1723,7 @@ const CompanyDashboard = () => {
 
               <Grid item xs={12}>
                 <Divider />
-                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 600, color: 'primary.main' }}>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 700, color: 'primary.main' }}>
                   Application for: {selectedApplication.jobTitle}
                 </Typography>
                 
@@ -1318,7 +1734,16 @@ const CompanyDashboard = () => {
                     </Typography>
                     <List dense>
                       {selectedApplication.transcripts.map((transcript, index) => (
-                        <ListItem key={index} sx={{ border: 1, borderColor: 'grey.200', borderRadius: 1, mb: 1 }}>
+                        <ListItem 
+                          key={index} 
+                          sx={{ 
+                            border: 1, 
+                            borderColor: 'grey.200', 
+                            borderRadius: 2, 
+                            mb: 1,
+                            bgcolor: 'white'
+                          }}
+                        >
                           <ListItemText 
                             primary={transcript.institution}
                             secondary={`${transcript.educationLevel} - ${transcript.year} | GPA: ${transcript.gpa || 'N/A'}`}
@@ -1337,7 +1762,16 @@ const CompanyDashboard = () => {
                     </Typography>
                     <List dense>
                       {selectedApplication.certificates.map((certificate, index) => (
-                        <ListItem key={index} sx={{ border: 1, borderColor: 'grey.200', borderRadius: 1, mb: 1 }}>
+                        <ListItem 
+                          key={index} 
+                          sx={{ 
+                            border: 1, 
+                            borderColor: 'grey.200', 
+                            borderRadius: 2, 
+                            mb: 1,
+                            bgcolor: 'white'
+                          }}
+                        >
                           <ListItemText 
                             primary={certificate.name}
                             secondary={`${certificate.issuingOrganization} | ${certificate.year}`}
@@ -1351,7 +1785,7 @@ const CompanyDashboard = () => {
 
                 {(!selectedApplication.transcripts || selectedApplication.transcripts.length === 0) &&
                  (!selectedApplication.certificates || selectedApplication.certificates.length === 0) && (
-                  <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic' }}>
+                  <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 2 }}>
                     No qualifications uploaded yet
                   </Typography>
                 )}
@@ -1359,7 +1793,7 @@ const CompanyDashboard = () => {
 
               <Grid item xs={12}>
                 <Divider />
-                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 600, color: 'primary.main' }}>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 700, color: 'primary.main' }}>
                   Application Status
                 </Typography>
                 <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 2 }}>
@@ -1402,19 +1836,40 @@ const CompanyDashboard = () => {
           )}
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleCloseViewApplication}>Close</Button>
+          <Button 
+            onClick={handleCloseViewApplication}
+            sx={{ borderRadius: 1 }}
+          >
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Notifications */}
       <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: '100%' }}>
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity="error" 
+          sx={{ 
+            width: '100%',
+            borderRadius: 2,
+            fontWeight: 500,
+          }}
+        >
           {error}
         </Alert>
       </Snackbar>
 
       <Snackbar open={!!success} autoHideDuration={4000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity="success" 
+          sx={{ 
+            width: '100%',
+            borderRadius: 2,
+            fontWeight: 500,
+          }}
+        >
           {success}
         </Alert>
       </Snackbar>
