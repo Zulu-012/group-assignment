@@ -686,6 +686,12 @@ const InstituteDashboard = ({ user: propUser }) => {
 
   return (
     <div className="institute-dashboard">
+      {/* Floating bubbles background elements */}
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      
       <div className="dashboard-header">
         <div className="user-welcome">
           <h1>Welcome back, {profile?.name || 'Institution'}!</h1>

@@ -1,4 +1,3 @@
-
 // src/components/StudentDashboard.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -1220,6 +1219,12 @@ const StudentDashboard = ({ user: propUser }) => {
 
   return (
     <div className="student-dashboard">
+      {/* Floating bubbles background elements */}
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      
       <div className="dashboard-header">
         <div className="user-welcome">
           <h1>Welcome back, {user.name}!</h1>

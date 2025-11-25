@@ -1,4 +1,4 @@
-// CompanyDashboard.js - Updated to remove hired applicants
+// src/components/CompanyDashboard.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -1110,6 +1110,12 @@ const CompanyDashboard = ({ user: propUser }) => {
 
   return (
     <div className="company-dashboard">
+      {/* Floating bubbles background elements */}
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      <div className="floating-bubble"></div>
+      
       <div className="dashboard-header">
         <div className="header-main">
           <div className="user-welcome">
