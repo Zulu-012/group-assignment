@@ -1,3 +1,4 @@
+
 // src/components/StudentDashboard.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -79,7 +80,7 @@ const StudentDashboard = ({ user: propUser }) => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+      const response = await fetch(`${API_BASE_URL}/api${endpoint}`, config);
       
       if (response.status === 401 || response.status === 403) {
         // Token expired or invalid
