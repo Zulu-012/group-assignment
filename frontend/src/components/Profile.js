@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com/api';
 
 const Profile = ({ user: propUser }) => {
   const [user, setUser] = useState(propUser);
@@ -32,12 +32,16 @@ const Profile = ({ user: propUser }) => {
   });
 
   const apiCall = async (endpoint, options = {}) => {
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem('token');
     
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+
     const config = {
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
+        'Authorization': `Bearer ${token}`,
         ...options.headers,
       },
       ...options,
@@ -49,6 +53,14 @@ const Profile = ({ user: propUser }) => {
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+      
+      if (response.status === 401 || response.status === 403) {
+        // Token expired or invalid
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+        throw new Error('Session expired. Please log in again.');
+      }
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -64,10 +76,14 @@ const Profile = ({ user: propUser }) => {
 
   useEffect(() => {
     if (!user) {
-      const userData = localStorage.getItem('userData');
+      const userData = localStorage.getItem('user');
       if (userData) {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
+        try {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+        } catch (e) {
+          console.error('Error parsing user data:', e);
+        }
       }
     }
   }, [user]);
@@ -144,7 +160,7 @@ const Profile = ({ user: propUser }) => {
       };
       
       setUser(updatedUser);
-      localStorage.setItem('userData', JSON.stringify(updatedUser));
+      localStorage.setItem('user', JSON.stringify(updatedUser));
 
       setMessage('Profile updated successfully!');
       setIsEditing(false);
@@ -179,8 +195,8 @@ const Profile = ({ user: propUser }) => {
       
       // Logout and redirect to login
       setTimeout(() => {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userData');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         navigate('/login');
       }, 2000);
       
