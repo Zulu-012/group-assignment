@@ -1,4 +1,4 @@
-// CompanyDashboard.js - Updated with detailed profile and institution integration
+// CompanyDashboard.js - Updated to remove hired applicants
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -29,6 +29,7 @@ const CompanyDashboard = ({ user: propUser }) => {
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
   const [qualifiedApplicants, setQualifiedApplicants] = useState([]);
+  const [hiredApplicants, setHiredApplicants] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [selectedApplication, setSelectedApplication] = useState(null);
@@ -134,7 +135,8 @@ const CompanyDashboard = ({ user: propUser }) => {
       await Promise.all([
         loadJobs(),
         loadApplications(),
-        loadQualifiedApplicants()
+        loadQualifiedApplicants(),
+        loadHiredApplicants()
       ]);
       
     } catch (error) {
@@ -158,7 +160,9 @@ const CompanyDashboard = ({ user: propUser }) => {
   const loadApplications = async () => {
     try {
       const data = await apiCall('/company/applications');
-      setApplications(data.applications || []);
+      // Filter out hired applicants from main applications list
+      const nonHiredApplications = (data.applications || []).filter(app => app.status !== 'hired');
+      setApplications(nonHiredApplications);
     } catch (error) {
       console.error('Error loading applications:', error);
       setApplications([]);
@@ -168,10 +172,24 @@ const CompanyDashboard = ({ user: propUser }) => {
   const loadQualifiedApplicants = async () => {
     try {
       const data = await apiCall('/company/qualified-applicants');
-      setQualifiedApplicants(data.applications || []);
+      // Filter out hired applicants from qualified list
+      const nonHiredQualified = (data.applications || []).filter(app => app.status !== 'hired');
+      setQualifiedApplicants(nonHiredQualified);
     } catch (error) {
       console.error('Error loading qualified applicants:', error);
       setQualifiedApplicants([]);
+    }
+  };
+
+  const loadHiredApplicants = async () => {
+    try {
+      const data = await apiCall('/company/applications');
+      // Get only hired applicants
+      const hiredApps = (data.applications || []).filter(app => app.status === 'hired');
+      setHiredApplicants(hiredApps);
+    } catch (error) {
+      console.error('Error loading hired applicants:', error);
+      setHiredApplicants([]);
     }
   };
 
@@ -190,12 +208,12 @@ const CompanyDashboard = ({ user: propUser }) => {
     }
   };
 
-  // Statistics calculation
+  // Statistics calculation - exclude hired applicants from active counts
   const stats = {
     totalJobs: jobs.length,
-    totalApplications: applications.length,
-    qualifiedApplicants: qualifiedApplicants.length,
-    hiredApplicants: applications.filter(app => app.status === 'hired').length,
+    totalApplications: applications.length, // This now excludes hired applicants
+    qualifiedApplicants: qualifiedApplicants.length, // This now excludes hired applicants
+    hiredApplicants: hiredApplicants.length,
     interviewScheduled: applications.filter(app => app.status === 'interview').length,
     pendingReview: applications.filter(app => app.status === 'pending').length
   };
@@ -295,10 +313,23 @@ const CompanyDashboard = ({ user: propUser }) => {
         body: { status }
       });
 
-      setMessage('Application status updated successfully!');
-      await loadApplications();
-      await loadQualifiedApplicants();
+      setMessage(`Application ${status} successfully!`);
+      
+      // Reload all data to reflect changes
+      await Promise.all([
+        loadApplications(),
+        loadQualifiedApplicants(),
+        loadHiredApplicants()
+      ]);
+      
+      // Close modal if status is not interview
       if (status !== 'interview') {
+        setShowApplicationModal(false);
+      }
+      
+      // If hired, show success message and close modal
+      if (status === 'hired') {
+        setMessage('🎉 Applicant hired successfully! They have been moved to the Hired Applicants section.');
         setShowApplicationModal(false);
       }
     } catch (error) {
@@ -348,7 +379,7 @@ const CompanyDashboard = ({ user: propUser }) => {
     }
   };
 
-  // Filter applications based on search and status
+  // Filter applications based on search and status (excludes hired by default)
   const filteredApplications = applications.filter(app => {
     const matchesSearch = searchTerm === '' || 
       app.student?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -414,7 +445,7 @@ const CompanyDashboard = ({ user: propUser }) => {
         <div className="stat-card">
           <h3>Applications</h3>
           <p className="stat-number">{stats.totalApplications}</p>
-          <p>Total applications</p>
+          <p>Active applications</p>
         </div>
         <div className="stat-card">
           <h3>Qualified</h3>
@@ -422,14 +453,14 @@ const CompanyDashboard = ({ user: propUser }) => {
           <p>Qualified applicants</p>
         </div>
         <div className="stat-card">
+          <h3>Hired</h3>
+          <p className="stat-number hired-count">{stats.hiredApplicants}</p>
+          <p>Successful hires</p>
+        </div>
+        <div className="stat-card">
           <h3>Interviews</h3>
           <p className="stat-number">{stats.interviewScheduled}</p>
           <p>Scheduled interviews</p>
-        </div>
-        <div className="stat-card">
-          <h3>Pending Review</h3>
-          <p className="stat-number">{stats.pendingReview}</p>
-          <p>Applications pending</p>
         </div>
       </div>
 
@@ -459,6 +490,12 @@ const CompanyDashboard = ({ user: propUser }) => {
             onClick={() => setActiveTab('qualified')}
           >
             Qualified Applicants
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('hired')}
+          >
+            🎉 Hired Applicants ({stats.hiredApplicants})
           </button>
         </div>
       </div>
@@ -498,71 +535,72 @@ const CompanyDashboard = ({ user: propUser }) => {
       </div>
 
       <div className="jobs-grid">
-        {jobs.map((job) => (
-          <div key={job.id} className="job-card">
-            <div className="job-header">
-              <h3>{job.title}</h3>
-              <span className={`status-badge ${job.status || 'active'}`}>
-                {job.status || 'active'}
-              </span>
-            </div>
-            
-            <div className="job-meta">
-              <span>📍 {job.location}</span>
-              <span>💼 {job.jobType}</span>
-              <span>💰 {job.salary}</span>
-            </div>
-
-            <p className="job-description">
-              {job.description && job.description.length > 120 
-                ? `${job.description.substring(0, 120)}...` 
-                : job.description || 'No description provided'}
-            </p>
-
-            <div className="job-stats">
-              <div className="stat">
-                <span className="stat-number">
-                  {applications.filter(app => app.jobId === job.id).length}
+        {jobs.map((job) => {
+          const jobApplications = applications.filter(app => app.jobId === job.id);
+          const jobHiredCount = hiredApplicants.filter(app => app.jobId === job.id).length;
+          
+          return (
+            <div key={job.id} className="job-card">
+              <div className="job-header">
+                <h3>{job.title}</h3>
+                <span className={`status-badge ${job.status || 'active'}`}>
+                  {job.status || 'active'}
                 </span>
-                <span className="stat-label">Applications</span>
               </div>
-              <div className="stat">
-                <span className="stat-number">
-                  {Math.min((applications.filter(app => app.jobId === job.id).length / 10) * 100, 100)}%
-                </span>
-                <span className="stat-label">Progress</span>
+              
+              <div className="job-meta">
+                <span>📍 {job.location}</span>
+                <span>💼 {job.jobType}</span>
+                <span>💰 {job.salary}</span>
+              </div>
+
+              <p className="job-description">
+                {job.description && job.description.length > 120 
+                  ? `${job.description.substring(0, 120)}...` 
+                  : job.description || 'No description provided'}
+              </p>
+
+              <div className="job-stats">
+                <div className="stat">
+                  <span className="stat-number">{jobApplications.length}</span>
+                  <span className="stat-label">Active Applications</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-number hired-count">{jobHiredCount}</span>
+                  <span className="stat-label">Hired</span>
+                </div>
+              </div>
+
+              <p className="application-date">
+                Deadline: {formatDate(job.deadline)}
+              </p>
+
+              <div className="job-actions">
+                <button 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setSelectedJob(job);
+                    setActiveTab('applications');
+                  }}
+                >
+                  View Applications
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleEditJob(job)}
+                >
+                  Edit
+                </button>
+                <button 
+                  className="btn btn-danger btn-sm"
+                  onClick={() => handleDeleteJob(job.id)}
+                >
+                  Delete
+                </button>
               </div>
             </div>
-
-            <p className="application-date">
-              Deadline: {formatDate(job.deadline)}
-            </p>
-
-            <div className="job-actions">
-              <button 
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setSelectedJob(job);
-                  setActiveTab('applications');
-                }}
-              >
-                View Applications
-              </button>
-              <button 
-                className="btn btn-secondary btn-sm"
-                onClick={() => handleEditJob(job)}
-              >
-                Edit
-              </button>
-              <button 
-                className="btn btn-danger btn-sm"
-                onClick={() => handleDeleteJob(job.id)}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {jobs.length === 0 && (
@@ -581,7 +619,11 @@ const CompanyDashboard = ({ user: propUser }) => {
 
   const renderApplicationsTab = () => (
     <div className="dashboard-module">
-      <h2>Job Applications</h2>
+      <h2>Active Job Applications</h2>
+      <div className="info-banner">
+        <p>💡 <strong>Note:</strong> Hired applicants are automatically moved to the "Hired Applicants" section.</p>
+      </div>
+      
       {selectedJob && (
         <div className="warning-banner">
           <p>Filtering applications for: <strong>{selectedJob.title}</strong></p>
@@ -615,11 +657,10 @@ const CompanyDashboard = ({ user: propUser }) => {
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
             <option value="interview">Interview</option>
-            <option value="hired">Hired</option>
           </select>
           
           <span className="application-count">
-            Total: {filteredApplications.length}
+            Active: {filteredApplications.length}
           </span>
         </div>
       </div>
@@ -709,12 +750,27 @@ const CompanyDashboard = ({ user: propUser }) => {
                       Approve
                     </button>
                     <button 
+                      className="btn btn-primary btn-sm hire-btn"
+                      onClick={() => handleUpdateApplicationStatus(application.id, 'hired')}
+                    >
+                      🎉 Hire
+                    </button>
+                    <button 
                       className="btn btn-danger btn-sm"
                       onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
                     >
                       Reject
                     </button>
                   </>
+                )}
+
+                {application.status === 'approved' && (
+                  <button 
+                    className="btn btn-primary btn-sm hire-btn"
+                    onClick={() => handleUpdateApplicationStatus(application.id, 'hired')}
+                  >
+                    🎉 Hire
+                  </button>
                 )}
               </div>
             </div>
@@ -726,10 +782,10 @@ const CompanyDashboard = ({ user: propUser }) => {
         <div className="no-data">
           <p>
             {selectedJob 
-              ? `No applications for "${selectedJob.title}" yet` 
+              ? `No active applications for "${selectedJob.title}" yet` 
               : searchTerm || statusFilter !== 'all'
               ? 'No applications match your search criteria'
-              : 'No applications received yet'
+              : 'No active applications received yet'
             }
           </p>
           {(searchTerm || statusFilter !== 'all') && (
@@ -851,6 +907,12 @@ const CompanyDashboard = ({ user: propUser }) => {
                   >
                     Schedule Interview
                   </button>
+                  <button 
+                    className="btn btn-primary btn-sm hire-btn"
+                    onClick={() => handleUpdateApplicationStatus(applicant.id, 'hired')}
+                  >
+                    🎉 Hire
+                  </button>
                 </div>
               </div>
             </div>
@@ -920,6 +982,12 @@ const CompanyDashboard = ({ user: propUser }) => {
                     Approve
                   </button>
                   <button 
+                    className="btn btn-primary btn-sm hire-btn"
+                    onClick={() => handleUpdateApplicationStatus(applicant.id, 'hired')}
+                  >
+                    🎉 Hire
+                  </button>
+                  <button 
                     className="btn btn-danger btn-sm"
                     onClick={() => handleUpdateApplicationStatus(applicant.id, 'rejected')}
                   >
@@ -946,6 +1014,95 @@ const CompanyDashboard = ({ user: propUser }) => {
           >
             View Qualified Applicants
           </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderHiredTab = () => (
+    <div className="dashboard-module">
+      <h2>🎉 Hired Applicants ({stats.hiredApplicants})</h2>
+      
+      <div className="success-banner">
+        <p>Congratulations! These applicants have been successfully hired.</p>
+      </div>
+
+      <div className="applicants-list hired-list">
+        {hiredApplicants.map((applicant) => {
+          const applicantDetails = getApplicantDetails(applicant);
+          
+          return (
+            <div key={applicant.id} className="applicant-card hired-card">
+              <div className="applicant-header">
+                <div className="applicant-info">
+                  <h3>{applicant.student?.name || 'Unknown Applicant'}</h3>
+                  <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
+                  <p className="position">{applicant.jobTitle}</p>
+                  
+                  {applicantDetails && (
+                    <div className="applicant-profile-summary">
+                      {applicantDetails.educationLevel && (
+                        <span className="education-level">
+                          🎓 {applicantDetails.educationLevel}
+                        </span>
+                      )}
+                      {applicantDetails.major && (
+                        <span className="major">
+                          📚 {applicantDetails.major}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                <span className="status-badge hired">HIRED 🎉</span>
+              </div>
+
+              <div className="applicant-meta">
+                <span className="applied-date">
+                  Hired: {formatDate(applicant.updatedAt || applicant.appliedAt)}
+                </span>
+                {applicantDetails?.phone && (
+                  <span>📞 {applicantDetails.phone}</span>
+                )}
+              </div>
+
+              <div className="applicant-actions">
+                <button 
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleViewApplication(applicant)}
+                >
+                  View Details
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleUpdateApplicationStatus(applicant.id, 'interview')}
+                >
+                  Move Back to Interview
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {hiredApplicants.length === 0 && (
+        <div className="no-data">
+          <p>No hired applicants yet. Hire applicants from the Interviews or Qualified Applicants tabs.</p>
+          <div className="action-buttons">
+            <button
+              className="btn btn-primary"
+              onClick={() => setActiveTab('interviews')}
+            >
+              View Interviews
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => setActiveTab('qualified')}
+            >
+              View Qualified Applicants
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -1001,7 +1158,7 @@ const CompanyDashboard = ({ user: propUser }) => {
           className={`tab-button ${activeTab === 'applications' ? 'active' : ''}`}
           onClick={() => setActiveTab('applications')}
         >
-          📋 All Applications
+          📋 Active Applications
           {stats.totalApplications > 0 && (
             <span className="notification-badge">{stats.totalApplications}</span>
           )}
@@ -1026,6 +1183,16 @@ const CompanyDashboard = ({ user: propUser }) => {
             <span className="notification-badge warning">{stats.interviewScheduled}</span>
           )}
         </button>
+
+        <button 
+          className={`tab-button ${activeTab === 'hired' ? 'active' : ''}`}
+          onClick={() => setActiveTab('hired')}
+        >
+          🎉 Hired
+          {stats.hiredApplicants > 0 && (
+            <span className="notification-badge hired">{stats.hiredApplicants}</span>
+          )}
+        </button>
       </div>
 
       <div className="dashboard-content">
@@ -1041,6 +1208,7 @@ const CompanyDashboard = ({ user: propUser }) => {
             {activeTab === 'applications' && renderApplicationsTab()}
             {activeTab === 'qualified' && renderQualifiedTab()}
             {activeTab === 'interviews' && renderInterviewsTab()}
+            {activeTab === 'hired' && renderHiredTab()}
           </>
         )}
       </div>
@@ -1507,16 +1675,16 @@ const CompanyDashboard = ({ user: propUser }) => {
                     Approved
                   </button>
                   <button 
+                    className={`btn btn-primary hire-btn ${selectedApplication.status === 'hired' ? 'active' : ''}`}
+                    onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'hired')}
+                  >
+                    🎉 Hire
+                  </button>
+                  <button 
                     className={`btn ${selectedApplication.status === 'rejected' ? 'btn-danger' : 'btn-secondary'}`}
                     onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'rejected')}
                   >
                     Rejected
-                  </button>
-                  <button 
-                    className={`btn ${selectedApplication.status === 'hired' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'hired')}
-                  >
-                    Hired
                   </button>
                 </div>
               </div>
