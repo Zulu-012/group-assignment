@@ -1,95 +1,44 @@
-// CompanyDashboard.js - FULLY UPDATED VERSION
+// CompanyDashboard.js - Updated with StudentDashboard styling approach
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  AppBar,
-  Toolbar,
-  Tabs,
-  Tab,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Alert,
-  Snackbar,
-  CircularProgress,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  IconButton,
-  CardActions,
-  Avatar,
-  LinearProgress,
-  Tooltip,
-  alpha,
-  useTheme
-} from '@mui/material';
-import {
-  Add as AddIcon,
-  Visibility as ViewIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Work as WorkIcon,
-  People as PeopleIcon,
-  TrendingUp as TrendingUpIcon,
-  Business as BusinessIcon,
-  Schedule as ScheduleIcon,
-  Email as EmailIcon,
-  Phone as PhoneIcon,
-  School as SchoolIcon,
-  LocationOn as LocationIcon,
-  AttachMoney as MoneyIcon,
-  Download as DownloadIcon,
-  FilterList as FilterIcon,
-  Search as SearchIcon,
-  Notifications as NotificationsIcon
-} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
-// API base URL
-const API_BASE_URL = 'https://group-assignment-2-ypxs.onrender.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://group-assignment-2-ypxs.onrender.com';
 
-const CompanyDashboard = () => {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0);
+// Helper function to remove undefined and empty string values from objects
+const cleanFormData = (obj) => {
+  if (typeof obj !== 'object' || obj === null) return obj;
+  
+  if (Array.isArray(obj)) {
+    return obj.map(cleanFormData);
+  }
+  
+  const cleanObj = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanObj[key] = cleanFormData(value);
+    }
+  }
+  return cleanObj;
+};
+
+const CompanyDashboard = ({ user: propUser }) => {
+  const [user, setUser] = useState(propUser);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [showApplicationModal, setShowApplicationModal] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
   const [qualifiedApplicants, setQualifiedApplicants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [createJobOpen, setCreateJobOpen] = useState(false);
-  const [viewApplicationOpen, setViewApplicationOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [editJobOpen, setEditJobOpen] = useState(false);
   const [jobToEdit, setJobToEdit] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const navigate = useNavigate();
 
-  // New job form state
-  const [newJob, setNewJob] = useState({
+  const [jobForm, setJobForm] = useState({
     title: '',
     description: '',
     requirements: '',
@@ -103,226 +52,251 @@ const CompanyDashboard = () => {
     experienceLevel: 'entry'
   });
 
-  // Statistics
-  const [stats, setStats] = useState({
-    totalJobs: 0,
-    totalApplications: 0,
-    qualifiedApplicants: 0,
-    hiredApplicants: 0,
-    interviewScheduled: 0,
-    pendingReview: 0
-  });
+  // Enhanced API call with proper authentication
+  const apiCall = async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
 
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+      },
+      ...options,
+    };
 
-  // Enhanced fetch function with better error handling
-  const apiFetch = async (endpoint, options = {}) => {
+    if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
+      config.body = JSON.stringify(config.body);
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...options.headers,
-        },
-        ...options,
-      });
-
-      // Check if response is HTML (error page) instead of JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
-          throw new Error('Server error - please try again later');
-        }
-        throw new Error(`Invalid response format: ${contentType}`);
+      const response = await fetch(`${API_BASE_URL}/api${endpoint}`, config);
+      
+      if (response.status === 401 || response.status === 403) {
+        // Token expired or invalid
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+        throw new Error('Session expired. Please log in again.');
       }
-
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
-    } catch (err) {
-      console.error('API fetch error:', err);
-      throw err;
+    } catch (error) {
+      console.error('API call failed:', error);
+      throw error;
     }
   };
 
-  // Fetch company data
-  const fetchCompanyData = async () => {
+  useEffect(() => {
+    // Check authentication
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    
+    if (!token || !userData) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const parsedUser = JSON.parse(userData);
+      if (parsedUser.role !== 'company') {
+        navigate('/login');
+        return;
+      }
+      setUser(parsedUser);
+    } catch (e) {
+      navigate('/login');
+      return;
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user, activeTab]);
+
+  const loadDashboardData = async () => {
     try {
       setLoading(true);
-      setError('');
       
-      const [jobsData, applicationsData, qualifiedData] = await Promise.all([
-        apiFetch('/api/company/jobs'),
-        apiFetch('/api/company/applications'),
-        apiFetch('/api/company/qualified-applicants')
+      // Load real data from server
+      await Promise.all([
+        loadJobs(),
+        loadApplications(),
+        loadQualifiedApplicants()
       ]);
-
-      if (jobsData.success) setJobs(jobsData.jobs || []);
-      if (applicationsData.success) setApplications(applicationsData.applications || []);
-      if (qualifiedData.success) setQualifiedApplicants(qualifiedData.applications || []);
-
-      // Calculate enhanced statistics
-      const applicationsList = applicationsData.applications || [];
-      setStats({
-        totalJobs: jobsData.jobs?.length || 0,
-        totalApplications: applicationsList.length,
-        qualifiedApplicants: qualifiedData.applications?.length || 0,
-        hiredApplicants: applicationsList.filter(app => app.status === 'hired').length,
-        interviewScheduled: applicationsList.filter(app => app.status === 'interview').length,
-        pendingReview: applicationsList.filter(app => app.status === 'pending').length
-      });
-
-    } catch (err) {
-      setError(`Failed to load data: ${err.message}`);
-      // Set empty arrays to prevent further errors
-      setJobs([]);
-      setApplications([]);
-      setQualifiedApplicants([]);
+      
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      setMessage(`Error loading data: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    // Check if user is actually a company
-    if (user.role !== 'company') {
-      setError('Access denied. Company role required.');
-      return;
-    }
-    
-    if (token) {
-      fetchCompanyData();
-    } else {
-      navigate('/login');
-    }
-  }, []);
-
-  // Create new job posting
-  const handleCreateJob = async () => {
+  const loadJobs = async () => {
     try {
-      setError('');
-      
-      const data = await apiFetch('/api/company/jobs', {
+      const data = await apiCall('/company/jobs');
+      setJobs(data.jobs || []);
+    } catch (error) {
+      console.error('Error loading jobs:', error);
+      setJobs([]);
+    }
+  };
+
+  const loadApplications = async () => {
+    try {
+      const data = await apiCall('/company/applications');
+      setApplications(data.applications || []);
+    } catch (error) {
+      console.error('Error loading applications:', error);
+      setApplications([]);
+    }
+  };
+
+  const loadQualifiedApplicants = async () => {
+    try {
+      const data = await apiCall('/company/qualified-applicants');
+      setQualifiedApplicants(data.applications || []);
+    } catch (error) {
+      console.error('Error loading qualified applicants:', error);
+      setQualifiedApplicants([]);
+    }
+  };
+
+  // Statistics calculation
+  const stats = {
+    totalJobs: jobs.length,
+    totalApplications: applications.length,
+    qualifiedApplicants: qualifiedApplicants.length,
+    hiredApplicants: applications.filter(app => app.status === 'hired').length,
+    interviewScheduled: applications.filter(app => app.status === 'interview').length,
+    pendingReview: applications.filter(app => app.status === 'pending').length
+  };
+
+  const handleCreateJob = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const jobPayload = cleanFormData({
+        ...jobForm,
+        requirements: jobForm.requirements.split(',').map(req => req.trim()).filter(req => req),
+        qualifications: jobForm.qualifications.split(',').map(qual => qual.trim()).filter(qual => qual),
+        skills: jobForm.skills.split(',').map(skill => skill.trim()).filter(skill => skill)
+      });
+
+      await apiCall('/company/jobs', {
         method: 'POST',
-        body: JSON.stringify({
-          ...newJob,
-          requirements: newJob.requirements.split(',').map(req => req.trim()).filter(req => req),
-          qualifications: newJob.qualifications.split(',').map(qual => qual.trim()).filter(qual => qual),
-          skills: newJob.skills.split(',').map(skill => skill.trim()).filter(skill => skill)
-        })
+        body: jobPayload
       });
 
-      if (data.success) {
-        setSuccess('Job posting created successfully!');
-        setCreateJobOpen(false);
-        setNewJob({
-          title: '',
-          description: '',
-          requirements: '',
-          qualifications: '',
-          skills: '',
-          deadline: '',
-          location: '',
-          salary: '',
-          jobType: 'full-time',
-          requiredEducation: '',
-          experienceLevel: 'entry'
-        });
-        fetchCompanyData();
-      } else {
-        setError(data.error || 'Failed to create job posting');
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to create job posting');
+      setMessage('Job posting created successfully!');
+      setJobForm({
+        title: '',
+        description: '',
+        requirements: '',
+        qualifications: '',
+        skills: '',
+        deadline: '',
+        location: '',
+        salary: '',
+        jobType: 'full-time',
+        requiredEducation: '',
+        experienceLevel: 'entry'
+      });
+      setShowJobForm(false);
+      await loadJobs();
+    } catch (error) {
+      setMessage(`Error creating job posting: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Update job posting
-  const handleUpdateJob = async () => {
+  const handleUpdateJob = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+
     try {
-      setError('');
-      
-      const data = await apiFetch(`/api/company/jobs/${jobToEdit.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          ...jobToEdit,
-          requirements: jobToEdit.requirements.split(',').map(req => req.trim()).filter(req => req),
-          qualifications: jobToEdit.qualifications.split(',').map(qual => qual.trim()).filter(qual => qual),
-          skills: jobToEdit.skills.split(',').map(skill => skill.trim()).filter(skill => skill)
-        })
+      const jobPayload = cleanFormData({
+        ...jobToEdit,
+        requirements: jobToEdit.requirements.split(',').map(req => req.trim()).filter(req => req),
+        qualifications: jobToEdit.qualifications.split(',').map(qual => qual.trim()).filter(qual => qual),
+        skills: jobToEdit.skills.split(',').map(skill => skill.trim()).filter(skill => skill)
       });
 
-      if (data.success) {
-        setSuccess('Job posting updated successfully!');
-        setEditJobOpen(false);
-        setJobToEdit(null);
-        fetchCompanyData();
-      } else {
-        setError(data.error || 'Failed to update job posting');
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to update job posting');
+      await apiCall(`/company/jobs/${jobToEdit.id}`, {
+        method: 'PUT',
+        body: jobPayload
+      });
+
+      setMessage('Job posting updated successfully!');
+      setJobToEdit(null);
+      await loadJobs();
+    } catch (error) {
+      setMessage(`Error updating job posting: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Delete job posting
   const handleDeleteJob = async (jobId) => {
     if (window.confirm('Are you sure you want to delete this job posting?')) {
       try {
-        setError('');
-        
-        const data = await apiFetch(`/api/company/jobs/${jobId}`, {
+        setLoading(true);
+        await apiCall(`/company/jobs/${jobId}`, {
           method: 'DELETE'
         });
 
-        if (data.success) {
-          setSuccess('Job posting deleted successfully!');
-          fetchCompanyData();
-        } else {
-          setError(data.error || 'Failed to delete job posting');
-        }
-      } catch (err) {
-        setError(err.message || 'Failed to delete job posting');
+        setMessage('Job posting deleted successfully!');
+        await loadJobs();
+      } catch (error) {
+        setMessage(`Error deleting job posting: ${error.message}`);
+      } finally {
+        setLoading(false);
       }
     }
   };
 
-  // Update application status
   const handleUpdateApplicationStatus = async (applicationId, status) => {
     try {
-      setError('');
-      
-      const data = await apiFetch(`/api/company/applications/${applicationId}`, {
+      setLoading(true);
+      await apiCall(`/company/applications/${applicationId}`, {
         method: 'PUT',
-        body: JSON.stringify({ status })
+        body: { status }
       });
 
-      if (data.success) {
-        setSuccess('Application status updated successfully!');
-        fetchCompanyData();
-        if (status !== 'interview') {
-          setViewApplicationOpen(false);
-        }
-      } else {
-        setError(data.error || 'Failed to update application status');
+      setMessage('Application status updated successfully!');
+      await loadApplications();
+      await loadQualifiedApplicants();
+      if (status !== 'interview') {
+        setShowApplicationModal(false);
       }
-    } catch (err) {
-      setError(err.message || 'Failed to update application status');
+    } catch (error) {
+      setMessage(`Error updating application status: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // View application details
   const handleViewApplication = (application) => {
     setSelectedApplication(application);
-    setViewApplicationOpen(true);
+    setShowApplicationModal(true);
   };
 
-  // Edit job posting
   const handleEditJob = (job) => {
     setJobToEdit({
       ...job,
@@ -330,47 +304,26 @@ const CompanyDashboard = () => {
       qualifications: Array.isArray(job.qualifications) ? job.qualifications.join(', ') : job.qualifications,
       skills: Array.isArray(job.skills) ? job.skills.join(', ') : job.skills
     });
-    setEditJobOpen(true);
   };
 
-  // Logout function
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/login');
   };
 
-  // Close dialogs
-  const handleCloseSnackbar = () => {
-    setError('');
-    setSuccess('');
-  };
-
-  const handleCloseCreateJob = () => {
-    setCreateJobOpen(false);
-    setNewJob({
-      title: '',
-      description: '',
-      requirements: '',
-      qualifications: '',
-      skills: '',
-      deadline: '',
-      location: '',
-      salary: '',
-      jobType: 'full-time',
-      requiredEducation: '',
-      experienceLevel: 'entry'
-    });
-  };
-
-  const handleCloseViewApplication = () => {
-    setViewApplicationOpen(false);
-    setSelectedApplication(null);
-  };
-
-  const handleCloseEditJob = () => {
-    setEditJobOpen(false);
-    setJobToEdit(null);
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not set';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return 'Invalid date';
+    }
   };
 
   // Filter applications based on search and status
@@ -384,19 +337,6 @@ const CompanyDashboard = () => {
     return matchesSearch && matchesStatus;
   });
 
-  // Tab panel component
-  const TabPanel = ({ children, value, index, ...other }) => (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-
   // Get status color
   const getStatusColor = (status) => {
     switch (status) {
@@ -407,1473 +347,988 @@ const CompanyDashboard = () => {
     }
   };
 
-  // Format date
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Not set';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
   // Check if user has company role
-  if (user.role !== 'company') {
+  if (user && user.role !== 'company') {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <Alert severity="error" sx={{ borderRadius: 2, boxShadow: 1 }}>
-          Access Denied. This dashboard is only available for company accounts.
-        </Alert>
-      </Box>
+      <div className="company-dashboard">
+        <div className="dashboard-header">
+          <div className="error-banner">
+            <div className="error-content">
+              <h4>Access Denied</h4>
+              <p>This dashboard is only available for company accounts.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px" flexDirection="column">
-        <CircularProgress size={60} thickness={4} />
-        <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary' }}>
-          Loading company dashboard...
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-          Preparing your recruitment data
-        </Typography>
-      </Box>
-    );
-  }
+  const renderDashboardTab = () => (
+    <div className="dashboard-module">
+      <h2>Recruitment Overview</h2>
+      
+      <div className="dashboard-stats">
+        <div className="stat-card">
+          <h3>Active Jobs</h3>
+          <p className="stat-number">{stats.totalJobs}</p>
+          <p>Job postings</p>
+        </div>
+        <div className="stat-card">
+          <h3>Applications</h3>
+          <p className="stat-number">{stats.totalApplications}</p>
+          <p>Total applications</p>
+        </div>
+        <div className="stat-card">
+          <h3>Qualified</h3>
+          <p className="stat-number">{stats.qualifiedApplicants}</p>
+          <p>Qualified applicants</p>
+        </div>
+        <div className="stat-card">
+          <h3>Interviews</h3>
+          <p className="stat-number">{stats.interviewScheduled}</p>
+          <p>Scheduled interviews</p>
+        </div>
+        <div className="stat-card">
+          <h3>Pending Review</h3>
+          <p className="stat-number">{stats.pendingReview}</p>
+          <p>Applications pending</p>
+        </div>
+      </div>
 
-  return (
-    <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
-      <AppBar 
-        position="static" 
-        color="primary" 
-        elevation={1}
-        sx={{ 
-          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.dark, 0.9)} 100%)`,
-        }}
-      >
-        <Toolbar>
-          <BusinessIcon sx={{ mr: 2, fontSize: 32 }} />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
-              {user.companyName || user.name} - Company Dashboard
-            </Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>
-              Recruitment Management Portal
-            </Typography>
-          </Box>
-          <Button 
-            color="inherit" 
-            onClick={handleLogout}
-            startIcon={<BusinessIcon />}
-            sx={{ 
-              borderRadius: 2,
-              px: 3,
-              fontWeight: 600
-            }}
+      <div className="quick-actions">
+        <h3>Quick Actions</h3>
+        <div className="action-buttons">
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowJobForm(true)}
           >
-            Logout
-          </Button>
-        </Toolbar>
-      </AppBar>
+            📝 Create Job Posting
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('jobs')}
+          >
+            Manage Job Postings
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('applications')}
+          >
+            View Applications
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('qualified')}
+          >
+            Qualified Applicants
+          </button>
+        </div>
+      </div>
 
-      {/* Statistics Cards */}
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 2 }}>
-        <Typography variant="h4" gutterBottom sx={{ 
-          fontWeight: 700, 
-          color: 'text.primary',
-          mb: 4,
-          background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          color: 'transparent',
-        }}>
-          Recruitment Overview
-        </Typography>
-        
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={2.4}>
-            <Card 
-              elevation={2}
-              sx={{
-                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.dark, 0.8)} 100%)`,
-                color: 'white',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                }
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
-                      Active Jobs
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.totalJobs}</Typography>
-                  </Box>
-                  <WorkIcon sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={2.4}>
-            <Card 
-              elevation={2}
-              sx={{
-                background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${alpha(theme.palette.secondary.dark, 0.8)} 100%)`,
-                color: 'white',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                }
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
-                      Applications
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.totalApplications}</Typography>
-                  </Box>
-                  <PeopleIcon sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={2.4}>
-            <Card 
-              elevation={2}
-              sx={{
-                background: `linear-gradient(135deg, #00c853 0%, ${alpha('#00c853', 0.8)} 100%)`,
-                color: 'white',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                }
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
-                      Qualified
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.qualifiedApplicants}</Typography>
-                  </Box>
-                  <TrendingUpIcon sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={2.4}>
-            <Card 
-              elevation={2}
-              sx={{
-                background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${alpha(theme.palette.warning.dark, 0.8)} 100%)`,
-                color: 'white',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                }
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
-                      Interviews
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.interviewScheduled}</Typography>
-                  </Box>
-                  <ScheduleIcon sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={2.4}>
-            <Card 
-              elevation={2}
-              sx={{
-                background: `linear-gradient(135deg, #9c27b0 0%, ${alpha('#9c27b0', 0.8)} 100%)`,
-                color: 'white',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                }
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography color="inherit" gutterBottom variant="overline" sx={{ opacity: 0.9, fontWeight: 600 }}>
-                      Pending Review
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800 }}>{stats.pendingReview}</Typography>
-                  </Box>
-                  <NotificationsIcon sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </Container>
+      {stats.totalApplications > 0 && (
+        <div className="notifications-panel">
+          <h3>Recent Activity</h3>
+          <div className="notifications-list">
+            {applications.slice(0, 5).map((application) => (
+              <div key={application.id} className="notification-item unread">
+                <span className="notification-icon">📢</span>
+                <span className="notification-text">
+                  New application from {application.student?.name || 'Unknown'} for {application.jobTitle}
+                </span>
+                <span className="notification-time">
+                  {formatDate(application.appliedAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
-      {/* Main Content */}
-      <Container maxWidth="xl" sx={{ mt: 2 }}>
-        <Card 
-          elevation={2}
-          sx={{
-            borderRadius: 3,
-            overflow: 'hidden',
-            background: 'white',
-          }}
+  const renderJobsTab = () => (
+    <div className="dashboard-module">
+      <h2>Job Postings Management</h2>
+      
+      <div className="section-actions">
+        <button 
+          className="btn btn-primary"
+          onClick={() => setShowJobForm(true)}
         >
-          <Tabs
-            value={activeTab}
-            onChange={(e, newValue) => {
-              setActiveTab(newValue);
-              setSelectedJob(null);
-              setSearchTerm('');
-              setStatusFilter('all');
-            }}
-            indicatorColor="primary"
-            textColor="primary"
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              borderBottom: 1,
-              borderColor: 'divider',
-              '& .MuiTab-root': {
-                fontWeight: 600,
-                fontSize: '0.95rem',
-                py: 2,
-                minHeight: 64,
-              }
-            }}
-          >
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <WorkIcon sx={{ mr: 1, fontSize: 20 }} />
-                  Job Postings
-                </Box>
-              } 
-            />
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <PeopleIcon sx={{ mr: 1, fontSize: 20 }} />
-                  All Applications
-                  {stats.totalApplications > 0 && (
-                    <Chip 
-                      label={stats.totalApplications} 
-                      size="small" 
-                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
-                    />
-                  )}
-                </Box>
-              } 
-            />
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <TrendingUpIcon sx={{ mr: 1, fontSize: 20 }} />
-                  Qualified Applicants
-                  {stats.qualifiedApplicants > 0 && (
-                    <Chip 
-                      label={stats.qualifiedApplicants} 
-                      size="small" 
-                      color="success"
-                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
-                    />
-                  )}
-                </Box>
-              } 
-            />
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <ScheduleIcon sx={{ mr: 1, fontSize: 20 }} />
-                  Interviews
-                  {stats.interviewScheduled > 0 && (
-                    <Chip 
-                      label={stats.interviewScheduled} 
-                      size="small" 
-                      color="warning"
-                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
-                    />
-                  )}
-                </Box>
-              } 
-            />
-          </Tabs>
+          📝 Create Job Posting
+        </button>
+      </div>
 
-          {/* Job Postings Tab */}
-          <TabPanel value={activeTab} index={0}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                Job Postings Management
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setCreateJobOpen(true)}
-                sx={{ 
-                  borderRadius: 2,
-                  px: 3,
-                  py: 1,
-                  fontWeight: 600,
-                  background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      <div className="jobs-grid">
+        {jobs.map((job) => (
+          <div key={job.id} className="job-card">
+            <div className="job-header">
+              <h3>{job.title}</h3>
+              <span className={`status-badge ${job.status || 'active'}`}>
+                {job.status || 'active'}
+              </span>
+            </div>
+            
+            <div className="job-meta">
+              <span>📍 {job.location}</span>
+              <span>💼 {job.jobType}</span>
+              <span>💰 {job.salary}</span>
+            </div>
+
+            <p className="job-description">
+              {job.description && job.description.length > 120 
+                ? `${job.description.substring(0, 120)}...` 
+                : job.description || 'No description provided'}
+            </p>
+
+            <div className="job-stats">
+              <div className="stat">
+                <span className="stat-number">
+                  {applications.filter(app => app.jobId === job.id).length}
+                </span>
+                <span className="stat-label">Applications</span>
+              </div>
+              <div className="stat">
+                <span className="stat-number">
+                  {Math.min((applications.filter(app => app.jobId === job.id).length / 10) * 100, 100)}%
+                </span>
+                <span className="stat-label">Progress</span>
+              </div>
+            </div>
+
+            <p className="application-date">
+              Deadline: {formatDate(job.deadline)}
+            </p>
+
+            <div className="job-actions">
+              <button 
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setSelectedJob(job);
+                  setActiveTab('applications');
                 }}
               >
-                Create Job Posting
-              </Button>
-            </Box>
+                View Applications
+              </button>
+              <button 
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleEditJob(job)}
+              >
+                Edit
+              </button>
+              <button 
+                className="btn btn-danger btn-sm"
+                onClick={() => handleDeleteJob(job.id)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
-            <Grid container spacing={3}>
-              {jobs.map((job) => (
-                <Grid item xs={12} md={6} lg={4} key={job.id}>
-                  <Card 
-                    variant="outlined" 
-                    sx={{ 
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      transition: 'all 0.3s ease',
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      '&:hover': {
-                        boxShadow: 6,
-                        transform: 'translateY(-4px)',
-                        borderColor: theme.palette.primary.light,
-                      }
-                    }}
-                  >
-                    <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                        <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, flex: 1, color: 'text.primary' }}>
-                          {job.title}
-                        </Typography>
-                        <Chip 
-                          label={job.status || 'active'} 
-                          color={getStatusColor(job.status)}
-                          size="small" 
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Box>
-                      
-                      <Box display="flex" alignItems="center" mb={1}>
-                        <LocationIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="textSecondary">
-                          {job.location}
-                        </Typography>
-                      </Box>
-                      
-                      <Box display="flex" alignItems="center" mb={1}>
-                        <WorkIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="textSecondary" textTransform="capitalize">
-                          {job.jobType}
-                        </Typography>
-                      </Box>
-                      
-                      <Box display="flex" alignItems="center" mb={2}>
-                        <MoneyIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="textSecondary">
-                          {job.salary}
-                        </Typography>
-                      </Box>
+      {jobs.length === 0 && (
+        <div className="no-data">
+          <p>No job postings yet. Create your first job posting to start receiving applications!</p>
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowJobForm(true)}
+          >
+            Create Your First Job Posting
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
-                      <Typography variant="body2" paragraph sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                        {job.description && job.description.length > 120 
-                          ? `${job.description.substring(0, 120)}...` 
-                          : job.description || 'No description provided'}
-                      </Typography>
+  const renderApplicationsTab = () => (
+    <div className="dashboard-module">
+      <h2>Job Applications</h2>
+      {selectedJob && (
+        <div className="warning-banner">
+          <p>Filtering applications for: <strong>{selectedJob.title}</strong></p>
+          <button 
+            className="btn btn-sm"
+            onClick={() => setSelectedJob(null)}
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
+      
+      <div className="section-actions">
+        <div className="filter-controls">
+          <input
+            type="text"
+            placeholder="Search applicants..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="form-input"
+            style={{width: '200px'}}
+          />
+          
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="form-select"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="interview">Interview</option>
+            <option value="hired">Hired</option>
+          </select>
+          
+          <span className="application-count">
+            Total: {filteredApplications.length}
+          </span>
+        </div>
+      </div>
 
-                      <Box mb={2}>
-                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
-                          <Typography variant="caption" color="textSecondary">
-                            Applications: {applications.filter(app => app.jobId === job.id).length}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            {Math.min((applications.filter(app => app.jobId === job.id).length / 10) * 100, 100)}%
-                          </Typography>
-                        </Box>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={Math.min((applications.filter(app => app.jobId === job.id).length / 10) * 100, 100)}
-                          sx={{ 
-                            height: 6, 
-                            borderRadius: 3,
-                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                            '& .MuiLinearProgress-bar': {
-                              borderRadius: 3,
-                              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                            }
-                          }}
-                        />
-                      </Box>
-
-                      <Typography variant="caption" color="textSecondary" display="block" sx={{ fontStyle: 'italic' }}>
-                        Deadline: {formatDate(job.deadline)}
-                      </Typography>
-                    </CardContent>
-                    
-                    <CardActions sx={{ p: 2, pt: 0, gap: 1 }}>
-                      <Button 
-                        size="small" 
-                        startIcon={<ViewIcon />}
-                        onClick={() => {
-                          setSelectedJob(job);
-                          setActiveTab(1);
-                        }}
-                        sx={{ borderRadius: 1 }}
-                      >
-                        View Apps
-                      </Button>
-                      <Button 
-                        size="small" 
-                        startIcon={<EditIcon />}
-                        onClick={() => handleEditJob(job)}
-                        sx={{ borderRadius: 1 }}
-                      >
-                        Edit
-                      </Button>
-                      <Button 
-                        size="small" 
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={() => handleDeleteJob(job.id)}
-                        sx={{ borderRadius: 1 }}
-                      >
-                        Delete
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-
-            {jobs.length === 0 && (
-              <Box textAlign="center" py={8}>
-                <WorkIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-                <Typography variant="h5" color="textSecondary" gutterBottom>
-                  No job postings yet
-                </Typography>
-                <Typography variant="body1" color="textSecondary" sx={{ mt: 1, mb: 4, maxWidth: 400, mx: 'auto' }}>
-                  Create your first job posting to start receiving applications from qualified candidates
-                </Typography>
-                <Button
-                  variant="contained"
-                  size="large"
-                  startIcon={<AddIcon />}
-                  onClick={() => setCreateJobOpen(true)}
-                  sx={{ 
-                    borderRadius: 2,
-                    px: 4,
-                    py: 1.5,
-                    fontWeight: 600,
-                  }}
-                >
-                  Create Your First Job Posting
-                </Button>
-              </Box>
-            )}
-          </TabPanel>
-
-          {/* All Applications Tab */}
-          <TabPanel value={activeTab} index={1}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                Job Applications
-                {selectedJob && (
-                  <Chip 
-                    label={`Filtering: ${selectedJob.title}`} 
-                    onDelete={() => setSelectedJob(null)}
-                    sx={{ ml: 2 }}
-                    color="primary"
-                    variant="outlined"
-                  />
-                )}
-              </Typography>
+      <div className="applications-list">
+        {filteredApplications.map((application) => (
+          <div key={application.id} className="application-card">
+            <div className="application-header">
+              <div className="applicant-info">
+                <h3>{application.student?.name || 'Unknown Applicant'}</h3>
+                <p className="applicant-email">{application.student?.email || 'No email'}</p>
+                <p className="position">{application.jobTitle}</p>
+              </div>
               
-              <Box display="flex" gap={2} alignItems="center">
-                <TextField
-                  size="small"
-                  placeholder="Search applicants..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  InputProps={{
-                    startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-                  }}
-                  sx={{ width: 200 }}
-                />
-                
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={statusFilter}
-                    label="Status"
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <MenuItem value="all">All Status</MenuItem>
-                    <MenuItem value="pending">Pending</MenuItem>
-                    <MenuItem value="approved">Approved</MenuItem>
-                    <MenuItem value="rejected">Rejected</MenuItem>
-                    <MenuItem value="interview">Interview</MenuItem>
-                    <MenuItem value="hired">Hired</MenuItem>
-                  </Select>
-                </FormControl>
-                
-                <Typography variant="body2" color="textSecondary" sx={{ fontWeight: 600 }}>
-                  Total: {filteredApplications.length}
-                </Typography>
-              </Box>
-            </Box>
+              <div className="applicant-score">
+                <div className={`score-badge ${application.score >= 70 ? 'qualified' : ''}`}>
+                  {application.score || 0}%
+                </div>
+                {application.score >= 70 && (
+                  <span className="qualified-badge">Qualified</span>
+                )}
+              </div>
+            </div>
 
-            <TableContainer 
-              component={Paper} 
-              elevation={0}
-              sx={{ 
-                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                borderRadius: 2,
+            <div className="applicant-meta">
+              <span className="applied-date">
+                Applied: {formatDate(application.appliedAt)}
+              </span>
+              <span className={`status-badge ${application.status}`}>
+                {application.status}
+              </span>
+            </div>
+
+            <div className="applicant-actions">
+              <button 
+                className="btn btn-primary btn-sm"
+                onClick={() => handleViewApplication(application)}
+              >
+                View Details
+              </button>
+              
+              {application.status === 'pending' && (
+                <>
+                  <button 
+                    className="btn btn-success btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(application.id, 'interview')}
+                  >
+                    Schedule Interview
+                  </button>
+                  <button 
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
+                  >
+                    Reject
+                  </button>
+                </>
+              )}
+              
+              {application.status === 'interview' && (
+                <>
+                  <button 
+                    className="btn btn-success btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(application.id, 'approved')}
+                  >
+                    Approve
+                  </button>
+                  <button 
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleUpdateApplicationStatus(application.id, 'rejected')}
+                  >
+                    Reject
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredApplications.length === 0 && (
+        <div className="no-data">
+          <p>
+            {selectedJob 
+              ? `No applications for "${selectedJob.title}" yet` 
+              : searchTerm || statusFilter !== 'all'
+              ? 'No applications match your search criteria'
+              : 'No applications received yet'
+            }
+          </p>
+          {(searchTerm || statusFilter !== 'all') && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('all');
               }}
             >
-              <Table>
-                <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Applicant</TableCell>
-                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Job Title</TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 700, py: 2 }}>Match Score</TableCell>
-                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 700, py: 2 }}>Applied Date</TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 700, py: 2 }}>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredApplications.map((application) => (
-                    <TableRow 
-                      key={application.id}
-                      sx={{ 
-                        '&:last-child td, &:last-child th': { border: 0 },
-                        transition: 'background-color 0.2s ease',
-                        '&:hover': {
-                          backgroundColor: alpha(theme.palette.primary.main, 0.02),
-                        },
-                        bgcolor: application.status === 'hired' ? alpha('#4caf50', 0.05) : 'transparent'
-                      }}
-                    >
-                      <TableCell sx={{ py: 2 }}>
-                        <Box display="flex" alignItems="center">
-                          <Avatar 
-                            sx={{ 
-                              width: 40, 
-                              height: 40, 
-                              mr: 2, 
-                              bgcolor: theme.palette.primary.main,
-                              fontWeight: 600 
-                            }}
-                          >
-                            {application.student?.name?.charAt(0) || 'A'}
-                          </Avatar>
-                          <Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {application.student?.name || 'Unknown Applicant'}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                              {application.student?.email || 'No email'}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={{ py: 2 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {application.jobTitle}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center" sx={{ py: 2 }}>
-                        <Tooltip title={`Match score: ${application.score || 0}%`}>
-                          <Box>
-                            <Chip 
-                              label={`${application.score || 0}%`}
-                              color={
-                                application.score >= 80 ? 'success' :
-                                application.score >= 60 ? 'warning' : 'default'
-                              }
-                              size="small"
-                              variant={application.score >= 70 ? 'filled' : 'outlined'}
-                              sx={{ fontWeight: 600 }}
-                            />
-                            {application.score >= 70 && (
-                              <TrendingUpIcon 
-                                sx={{ 
-                                  fontSize: 16, 
-                                  ml: 0.5, 
-                                  color: 'success.main',
-                                  verticalAlign: 'middle' 
-                                }} 
-                              />
-                            )}
-                          </Box>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell sx={{ py: 2 }}>
-                        <Chip 
-                          label={application.status?.toUpperCase()}
-                          color={
-                            application.status === 'approved' ? 'success' :
-                            application.status === 'rejected' ? 'error' :
-                            application.status === 'interview' ? 'warning' :
-                            application.status === 'hired' ? 'primary' : 'default'
-                          }
-                          size="small"
-                          sx={{ fontWeight: 600, minWidth: 80 }}
-                        />
-                      </TableCell>
-                      <TableCell sx={{ py: 2 }}>
-                        <Typography variant="body2">
-                          {application.appliedAt ? formatDate(application.appliedAt) : 'Unknown'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center" sx={{ py: 2 }}>
-                        <Tooltip title="View application details">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleViewApplication(application)}
-                            color="primary"
-                            sx={{ 
-                              borderRadius: 1,
-                              '&:hover': {
-                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                              }
-                            }}
-                          >
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            {filteredApplications.length === 0 && (
-              <Box textAlign="center" py={8}>
-                <PeopleIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-                <Typography variant="h5" color="textSecondary" gutterBottom>
-                  No applications found
-                </Typography>
-                <Typography variant="body1" color="textSecondary" sx={{ mt: 1 }}>
-                  {selectedJob 
-                    ? `No applications for "${selectedJob.title}" yet` 
-                    : searchTerm || statusFilter !== 'all'
-                    ? 'No applications match your search criteria'
-                    : 'No applications received yet'
-                  }
-                </Typography>
-                {(searchTerm || statusFilter !== 'all') && (
-                  <Button
-                    variant="outlined"
-                    sx={{ mt: 2 }}
-                    onClick={() => {
-                      setSearchTerm('');
-                      setStatusFilter('all');
-                    }}
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </Box>
-            )}
-          </TabPanel>
-
-          {/* Qualified Applicants Tab */}
-          <TabPanel value={activeTab} index={2}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, color: 'text.primary', mb: 3 }}>
-              Qualified Applicants (Score ≥ 70%)
-            </Typography>
-
-            <Grid container spacing={3}>
-              {qualifiedApplicants.map((applicant) => (
-                <Grid item xs={12} md={6} lg={4} key={applicant.id}>
-                  <Card 
-                    variant="outlined"
-                    sx={{
-                      transition: 'all 0.3s ease',
-                      border: `2px solid ${alpha('#00c853', 0.1)}`,
-                      '&:hover': {
-                        boxShadow: 4,
-                        transform: 'translateY(-4px)',
-                        borderColor: '#00c853',
-                      }
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box display="flex" alignItems="flex-start" mb={2}>
-                        <Avatar 
-                          sx={{ 
-                            width: 52, 
-                            height: 52, 
-                            mr: 2, 
-                            bgcolor: 'success.main',
-                            fontWeight: 600 
-                          }}
-                        >
-                          {applicant.student?.name?.charAt(0) || 'A'}
-                        </Avatar>
-                        <Box flex={1}>
-                          <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
-                            {applicant.student?.name || 'Unknown Applicant'}
-                          </Typography>
-                          <Typography color="textSecondary" variant="body2">
-                            {applicant.student?.email || 'No email'}
-                          </Typography>
-                        </Box>
-                        <Chip 
-                          label={`${applicant.score}%`}
-                          color="success"
-                          sx={{ fontWeight: 700 }}
-                        />
-                      </Box>
-                      
-                      <Box display="flex" alignItems="center" mb={1}>
-                        <SchoolIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2">
-                          {applicant.student?.educationLevel || 'Not specified'} in {applicant.student?.major || 'Not specified'}
-                        </Typography>
-                      </Box>
-
-                      <Box display="flex" alignItems="center" mb={2}>
-                        <WorkIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="primary" sx={{ fontWeight: 600 }}>
-                          {applicant.jobTitle}
-                        </Typography>
-                      </Box>
-
-                      {applicant.student?.skills && applicant.student.skills.length > 0 && (
-                        <Box mb={2}>
-                          <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
-                            KEY SKILLS:
-                          </Typography>
-                          <Box display="flex" gap={0.5} flexWrap="wrap">
-                            {applicant.student.skills.slice(0, 4).map((skill, index) => (
-                              <Chip 
-                                key={index}
-                                label={skill}
-                                size="small"
-                                variant="outlined"
-                                color="primary"
-                              />
-                            ))}
-                            {applicant.student.skills.length > 4 && (
-                              <Chip 
-                                label={`+${applicant.student.skills.length - 4} more`}
-                                size="small"
-                                variant="outlined"
-                              />
-                            )}
-                          </Box>
-                        </Box>
-                      )}
-
-                      <Box mt={2} display="flex" gap={1} flexWrap="wrap">
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handleViewApplication(applicant)}
-                          sx={{ borderRadius: 1 }}
-                        >
-                          View Details
-                        </Button>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          startIcon={<ScheduleIcon />}
-                          onClick={() => handleUpdateApplicationStatus(applicant.id, 'interview')}
-                          sx={{ 
-                            borderRadius: 1,
-                            background: `linear-gradient(45deg, ${theme.palette.warning.main}, ${theme.palette.warning.dark})`,
-                          }}
-                        >
-                          Schedule Interview
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-
-            {qualifiedApplicants.length === 0 && (
-              <Box textAlign="center" py={8}>
-                <TrendingUpIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-                <Typography variant="h5" color="textSecondary" gutterBottom>
-                  No qualified applicants yet
-                </Typography>
-                <Typography variant="body1" color="textSecondary" sx={{ mt: 1, mb: 4, maxWidth: 500, mx: 'auto' }}>
-                  Qualified applicants will appear here automatically when they score 70% or higher based on skills, education, and experience matching.
-                </Typography>
-              </Box>
-            )}
-          </TabPanel>
-
-          {/* Interviews Tab */}
-          <TabPanel value={activeTab} index={3}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, color: 'text.primary', mb: 3 }}>
-              Interview Scheduling ({stats.interviewScheduled})
-            </Typography>
-
-            <Grid container spacing={3}>
-              {applications
-                .filter(app => app.status === 'interview')
-                .map((applicant) => (
-                <Grid item xs={12} md={6} key={applicant.id}>
-                  <Card 
-                    variant="outlined"
-                    sx={{
-                      border: `2px solid ${alpha(theme.palette.warning.main, 0.2)}`,
-                      background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.05)} 0%, ${alpha(theme.palette.warning.light, 0.02)} 100%)`,
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box display="flex" alignItems="center" mb={2}>
-                        <Avatar 
-                          sx={{ 
-                            width: 48, 
-                            height: 48, 
-                            mr: 2, 
-                            bgcolor: 'warning.main',
-                            fontWeight: 600 
-                          }}
-                        >
-                          {applicant.student?.name?.charAt(0) || 'A'}
-                        </Avatar>
-                        <Box flex={1}>
-                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                            {applicant.student?.name || 'Unknown Applicant'}
-                          </Typography>
-                          <Typography color="textSecondary" variant="body2">
-                            For: {applicant.jobTitle}
-                          </Typography>
-                        </Box>
-                        <Chip 
-                          label="INTERVIEW"
-                          color="warning"
-                          sx={{ fontWeight: 700 }}
-                        />
-                      </Box>
-
-                      <Box display="flex" alignItems="center" mb={1}>
-                        <EmailIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2">
-                          {applicant.student?.email || 'No email'}
-                        </Typography>
-                      </Box>
-
-                      {applicant.student?.phone && (
-                        <Box display="flex" alignItems="center" mb={2}>
-                          <PhoneIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                          <Typography variant="body2">
-                            {applicant.student.phone}
-                          </Typography>
-                        </Box>
-                      )}
-
-                      <Box display="flex" gap={1} mt={2} flexWrap="wrap">
-                        <Button
-                          variant="contained"
-                          size="small"
-                          color="success"
-                          onClick={() => handleUpdateApplicationStatus(applicant.id, 'approved')}
-                          sx={{ borderRadius: 1, fontWeight: 600 }}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          color="error"
-                          onClick={() => handleUpdateApplicationStatus(applicant.id, 'rejected')}
-                          sx={{ borderRadius: 1 }}
-                        >
-                          Reject
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handleViewApplication(applicant)}
-                          sx={{ borderRadius: 1 }}
-                        >
-                          View Details
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-
-            {applications.filter(app => app.status === 'interview').length === 0 && (
-              <Box textAlign="center" py={8}>
-                <ScheduleIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-                <Typography variant="h5" color="textSecondary" gutterBottom>
-                  No interviews scheduled
-                </Typography>
-                <Typography variant="body1" color="textSecondary" sx={{ mt: 1, mb: 4 }}>
-                  Schedule interviews from the Qualified Applicants tab to see them here.
-                </Typography>
-                <Button
-                  variant="contained"
-                  onClick={() => setActiveTab(2)}
-                  sx={{ borderRadius: 2 }}
-                >
-                  View Qualified Applicants
-                </Button>
-              </Box>
-            )}
-          </TabPanel>
-        </Card>
-      </Container>
-
-      {/* Create Job Dialog */}
-      <Dialog 
-        open={createJobOpen} 
-        onClose={handleCloseCreateJob} 
-        maxWidth="md" 
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-          }
-        }}
-      >
-        <DialogTitle sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
-            Create New Job Posting
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            Fill in the details to create a new job opportunity
-          </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Job Title *"
-                value={newJob.title}
-                onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
-                error={!newJob.title}
-                helperText={!newJob.title ? "Job title is required" : ""}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="Job Description *"
-                value={newJob.description}
-                onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
-                error={!newJob.description}
-                helperText={!newJob.description ? "Job description is required" : ""}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Location *"
-                value={newJob.location}
-                onChange={(e) => setNewJob({ ...newJob, location: e.target.value })}
-                error={!newJob.location}
-                helperText={!newJob.location ? "Location is required" : ""}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Salary *"
-                value={newJob.salary}
-                onChange={(e) => setNewJob({ ...newJob, salary: e.target.value })}
-                error={!newJob.salary}
-                helperText={!newJob.salary ? "Salary is required" : ""}
-                placeholder="e.g., $50,000 - $70,000"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Job Type</InputLabel>
-                <Select
-                  value={newJob.jobType}
-                  label="Job Type"
-                  onChange={(e) => setNewJob({ ...newJob, jobType: e.target.value })}
-                >
-                  <MenuItem value="full-time">Full Time</MenuItem>
-                  <MenuItem value="part-time">Part Time</MenuItem>
-                  <MenuItem value="contract">Contract</MenuItem>
-                  <MenuItem value="internship">Internship</MenuItem>
-                  <MenuItem value="remote">Remote</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Experience Level</InputLabel>
-                <Select
-                  value={newJob.experienceLevel}
-                  label="Experience Level"
-                  onChange={(e) => setNewJob({ ...newJob, experienceLevel: e.target.value })}
-                >
-                  <MenuItem value="entry">Entry Level (0-2 years)</MenuItem>
-                  <MenuItem value="mid">Mid Level (2-5 years)</MenuItem>
-                  <MenuItem value="senior">Senior Level (5+ years)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Requirements (comma separated)"
-                value={newJob.requirements}
-                onChange={(e) => setNewJob({ ...newJob, requirements: e.target.value })}
-                placeholder="Bachelor's degree, 2 years experience, ..."
-                helperText="List each requirement separated by commas"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Qualifications (comma separated)"
-                value={newJob.qualifications}
-                onChange={(e) => setNewJob({ ...newJob, qualifications: e.target.value })}
-                placeholder="JavaScript, React, Node.js, ..."
-                helperText="List technical skills and qualifications"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Skills (comma separated)"
-                value={newJob.skills}
-                onChange={(e) => setNewJob({ ...newJob, skills: e.target.value })}
-                placeholder="Communication, Teamwork, Problem-solving, ..."
-                helperText="List soft skills and competencies"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Application Deadline *"
-                InputLabelProps={{ shrink: true }}
-                value={newJob.deadline}
-                onChange={(e) => setNewJob({ ...newJob, deadline: e.target.value })}
-                error={!newJob.deadline}
-                helperText={!newJob.deadline ? "Deadline is required" : "Applications will close on this date"}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions sx={{ p: 3, gap: 1 }}>
-          <Button 
-            onClick={handleCloseCreateJob}
-            sx={{ borderRadius: 1 }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleCreateJob} 
-            variant="contained"
-            disabled={!newJob.title || !newJob.description || !newJob.location || !newJob.salary || !newJob.deadline}
-            sx={{ 
-              minWidth: 120,
-              borderRadius: 1,
-              fontWeight: 600,
-            }}
-          >
-            Create Job
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Edit Job Dialog */}
-      <Dialog 
-        open={editJobOpen} 
-        onClose={handleCloseEditJob} 
-        maxWidth="md" 
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-          }
-        }}
-      >
-        <DialogTitle sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
-            Edit Job Posting
-          </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          {jobToEdit && (
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Job Title *"
-                  value={jobToEdit.title}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, title: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Job Description *"
-                  value={jobToEdit.description}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, description: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Location *"
-                  value={jobToEdit.location}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, location: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Salary *"
-                  value={jobToEdit.salary}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, salary: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Job Type</InputLabel>
-                  <Select
-                    value={jobToEdit.jobType}
-                    label="Job Type"
-                    onChange={(e) => setJobToEdit({ ...jobToEdit, jobType: e.target.value })}
-                  >
-                    <MenuItem value="full-time">Full Time</MenuItem>
-                    <MenuItem value="part-time">Part Time</MenuItem>
-                    <MenuItem value="contract">Contract</MenuItem>
-                    <MenuItem value="internship">Internship</MenuItem>
-                    <MenuItem value="remote">Remote</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Experience Level</InputLabel>
-                  <Select
-                    value={jobToEdit.experienceLevel}
-                    label="Experience Level"
-                    onChange={(e) => setJobToEdit({ ...jobToEdit, experienceLevel: e.target.value })}
-                  >
-                    <MenuItem value="entry">Entry Level</MenuItem>
-                    <MenuItem value="mid">Mid Level</MenuItem>
-                    <MenuItem value="senior">Senior Level</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Requirements (comma separated)"
-                  value={jobToEdit.requirements}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, requirements: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Qualifications (comma separated)"
-                  value={jobToEdit.qualifications}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, qualifications: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Skills (comma separated)"
-                  value={jobToEdit.skills}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, skills: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  type="date"
-                  label="Application Deadline *"
-                  InputLabelProps={{ shrink: true }}
-                  value={jobToEdit.deadline}
-                  onChange={(e) => setJobToEdit({ ...jobToEdit, deadline: e.target.value })}
-                />
-              </Grid>
-            </Grid>
+              Clear Filters
+            </button>
           )}
-        </DialogContent>
-        <DialogActions sx={{ p: 3, gap: 1 }}>
-          <Button 
-            onClick={handleCloseEditJob}
-            sx={{ borderRadius: 1 }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleUpdateJob} 
-            variant="contained"
-            sx={{ 
-              minWidth: 120,
-              borderRadius: 1,
-              fontWeight: 600,
-            }}
-          >
-            Update Job
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </div>
+      )}
+    </div>
+  );
 
-      {/* View Application Dialog */}
-      <Dialog 
-        open={viewApplicationOpen} 
-        onClose={handleCloseViewApplication} 
-        maxWidth="md" 
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            maxHeight: '90vh',
-          }
-        }}
-      >
-        <DialogTitle sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
-          <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
-              Application Details
-            </Typography>
-            {selectedApplication && (
-              <Chip 
-                label={`Score: ${selectedApplication.score}%`}
-                color={selectedApplication.score >= 70 ? 'success' : 'default'}
-                sx={{ fontWeight: 700 }}
-              />
+  const renderQualifiedTab = () => (
+    <div className="dashboard-module">
+      <h2>Qualified Applicants (Score ≥ 70%)</h2>
+
+      <div className="applicants-list compact">
+        {qualifiedApplicants.map((applicant) => (
+          <div key={applicant.id} className="applicant-card compact">
+            <div className="applicant-header">
+              <div className="applicant-info">
+                <h4>{applicant.student?.name || 'Unknown Applicant'}</h4>
+                <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
+                <p className="position">{applicant.jobTitle}</p>
+              </div>
+              
+              <div className="applicant-score">
+                <div className="score-circle" style={{
+                  background: `conic-gradient(#00f7ff ${applicant.score * 3.6}deg, #e1e5e9 0deg)`
+                }}>
+                  <span>{applicant.score}%</span>
+                </div>
+                <span className="score-level">Excellent Match</span>
+              </div>
+            </div>
+
+            <div className="applicant-details">
+              <div className="detail-section">
+                <h4>Education</h4>
+                <p>{applicant.student?.educationLevel || 'Not specified'} in {applicant.student?.major || 'Not specified'}</p>
+              </div>
+              
+              {applicant.student?.skills && applicant.student.skills.length > 0 && (
+                <div className="detail-section">
+                  <h4>Skills</h4>
+                  <div className="skills-list">
+                    {applicant.student.skills.slice(0, 4).map((skill, index) => (
+                      <span key={index} className="skill-tag">{skill}</span>
+                    ))}
+                    {applicant.student.skills.length > 4 && (
+                      <span className="skill-tag">+{applicant.student.skills.length - 4} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="applicant-footer">
+              <div className="application-meta">
+                <span>Applied: {formatDate(applicant.appliedAt)}</span>
+              </div>
+              
+              <div className="applicant-actions">
+                <button 
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleViewApplication(applicant)}
+                >
+                  View Details
+                </button>
+                <button 
+                  className="btn btn-warning btn-sm"
+                  onClick={() => handleUpdateApplicationStatus(applicant.id, 'interview')}
+                >
+                  Schedule Interview
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {qualifiedApplicants.length === 0 && (
+        <div className="no-data">
+          <p>No qualified applicants yet. Qualified applicants will appear here automatically when they score 70% or higher.</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderInterviewsTab = () => (
+    <div className="dashboard-module">
+      <h2>Interview Scheduling ({stats.interviewScheduled})</h2>
+
+      <div className="applicants-list">
+        {applications
+          .filter(app => app.status === 'interview')
+          .map((applicant) => (
+          <div key={applicant.id} className="applicant-card">
+            <div className="applicant-header">
+              <div className="applicant-info">
+                <h3>{applicant.student?.name || 'Unknown Applicant'}</h3>
+                <p className="applicant-email">{applicant.student?.email || 'No email'}</p>
+                <p className="position">{applicant.jobTitle}</p>
+              </div>
+              
+              <span className="status-badge interview">INTERVIEW</span>
+            </div>
+
+            {applicant.student?.phone && (
+              <div className="applicant-meta">
+                <span>📞 {applicant.student.phone}</span>
+              </div>
             )}
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          {selectedApplication && (
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
-                  Applicant Information
-                </Typography>
-                <List dense sx={{ bgcolor: 'grey.50', borderRadius: 2, p: 2 }}>
-                  <ListItem>
-                    <ListItemText 
-                      primary="Name" 
-                      secondary={selectedApplication.student?.name || 'Not available'} 
-                      primaryTypographyProps={{ fontWeight: 600 }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary="Email" 
-                      secondary={selectedApplication.student?.email || 'Not available'} 
-                      primaryTypographyProps={{ fontWeight: 600 }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary="Phone" 
-                      secondary={selectedApplication.student?.phone || 'Not available'} 
-                      primaryTypographyProps={{ fontWeight: 600 }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary="Education Level" 
-                      secondary={selectedApplication.student?.educationLevel || 'Not available'} 
-                      primaryTypographyProps={{ fontWeight: 600 }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary="Major" 
-                      secondary={selectedApplication.student?.major || 'Not available'} 
-                      primaryTypographyProps={{ fontWeight: 600 }}
-                    />
-                  </ListItem>
-                </List>
-              </Grid>
 
-              <Grid item xs={12}>
-                <Divider />
-                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 700, color: 'primary.main' }}>
-                  Application for: {selectedApplication.jobTitle}
-                </Typography>
+            <div className="applicant-actions">
+              <button 
+                className="btn btn-success btn-sm"
+                onClick={() => handleUpdateApplicationStatus(applicant.id, 'approved')}
+              >
+                Approve
+              </button>
+              <button 
+                className="btn btn-danger btn-sm"
+                onClick={() => handleUpdateApplicationStatus(applicant.id, 'rejected')}
+              >
+                Reject
+              </button>
+              <button 
+                className="btn btn-primary btn-sm"
+                onClick={() => handleViewApplication(applicant)}
+              >
+                View Details
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {applications.filter(app => app.status === 'interview').length === 0 && (
+        <div className="no-data">
+          <p>No interviews scheduled. Schedule interviews from the Qualified Applicants tab.</p>
+          <button
+            className="btn btn-primary"
+            onClick={() => setActiveTab('qualified')}
+          >
+            View Qualified Applicants
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="company-dashboard">
+      <div className="dashboard-header">
+        <div className="header-main">
+          <div className="user-welcome">
+            <h1>{user?.companyName || user?.name} - Company Dashboard</h1>
+            <p>Recruitment Management Portal</p>
+          </div>
+          <div className="user-actions">
+            <button 
+              className="btn btn-secondary"
+              onClick={loadDashboardData}
+            >
+              🔄 Refresh Data
+            </button>
+            <button 
+              className="btn btn-secondary logout-btn"
+              onClick={handleLogout}
+            >
+              🚪 Logout
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {message && (
+        <div className={`message ${message.includes('Error') ? 'error' : 'success'}`}>
+          {message}
+        </div>
+      )}
+
+      <div className="dashboard-tabs">
+        <button 
+          className={`tab-button ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          📊 Dashboard
+        </button>
+        
+        <button 
+          className={`tab-button ${activeTab === 'jobs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('jobs')}
+        >
+          💼 Job Postings
+        </button>
+        
+        <button 
+          className={`tab-button ${activeTab === 'applications' ? 'active' : ''}`}
+          onClick={() => setActiveTab('applications')}
+        >
+          📋 All Applications
+          {stats.totalApplications > 0 && (
+            <span className="notification-badge">{stats.totalApplications}</span>
+          )}
+        </button>
+        
+        <button 
+          className={`tab-button ${activeTab === 'qualified' ? 'active' : ''}`}
+          onClick={() => setActiveTab('qualified')}
+        >
+          ⭐ Qualified Applicants
+          {stats.qualifiedApplicants > 0 && (
+            <span className="notification-badge success">{stats.qualifiedApplicants}</span>
+          )}
+        </button>
+        
+        <button 
+          className={`tab-button ${activeTab === 'interviews' ? 'active' : ''}`}
+          onClick={() => setActiveTab('interviews')}
+        >
+          🗓️ Interviews
+          {stats.interviewScheduled > 0 && (
+            <span className="notification-badge warning">{stats.interviewScheduled}</span>
+          )}
+        </button>
+      </div>
+
+      <div className="dashboard-content">
+        {loading ? (
+          <div className="loading">
+            <div className="loading-spinner"></div>
+            Loading company dashboard...
+          </div>
+        ) : (
+          <>
+            {activeTab === 'dashboard' && renderDashboardTab()}
+            {activeTab === 'jobs' && renderJobsTab()}
+            {activeTab === 'applications' && renderApplicationsTab()}
+            {activeTab === 'qualified' && renderQualifiedTab()}
+            {activeTab === 'interviews' && renderInterviewsTab()}
+          </>
+        )}
+      </div>
+
+      {/* Create Job Modal */}
+      {showJobForm && (
+        <div className="modal-overlay">
+          <div className="modal-content large">
+            <div className="modal-header">
+              <h3>Create New Job Posting</h3>
+              <button 
+                className="close-button"
+                onClick={() => setShowJobForm(false)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateJob}>
+              <div className="form-section">
+                <h3>Job Details</h3>
+                
+                <div className="form-group">
+                  <label className="form-label required">Job Title</label>
+                  <input
+                    type="text"
+                    value={jobForm.title}
+                    onChange={(e) => setJobForm({...jobForm, title: e.target.value})}
+                    className="form-input"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">Job Description</label>
+                  <textarea
+                    value={jobForm.description}
+                    onChange={(e) => setJobForm({...jobForm, description: e.target.value})}
+                    className="form-input"
+                    rows="3"
+                    required
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label required">Location</label>
+                    <input
+                      type="text"
+                      value={jobForm.location}
+                      onChange={(e) => setJobForm({...jobForm, location: e.target.value})}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label required">Salary</label>
+                    <input
+                      type="text"
+                      value={jobForm.salary}
+                      onChange={(e) => setJobForm({...jobForm, salary: e.target.value})}
+                      className="form-input"
+                      placeholder="e.g., $50,000 - $70,000"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Job Type</label>
+                    <select
+                      value={jobForm.jobType}
+                      onChange={(e) => setJobForm({...jobForm, jobType: e.target.value})}
+                      className="form-select"
+                    >
+                      <option value="full-time">Full Time</option>
+                      <option value="part-time">Part Time</option>
+                      <option value="contract">Contract</option>
+                      <option value="internship">Internship</option>
+                      <option value="remote">Remote</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Experience Level</label>
+                    <select
+                      value={jobForm.experienceLevel}
+                      onChange={(e) => setJobForm({...jobForm, experienceLevel: e.target.value})}
+                      className="form-select"
+                    >
+                      <option value="entry">Entry Level (0-2 years)</option>
+                      <option value="mid">Mid Level (2-5 years)</option>
+                      <option value="senior">Senior Level (5+ years)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Requirements (comma separated)</label>
+                  <textarea
+                    value={jobForm.requirements}
+                    onChange={(e) => setJobForm({...jobForm, requirements: e.target.value})}
+                    className="form-input"
+                    placeholder="Bachelor's degree, 2 years experience, ..."
+                    rows="2"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Qualifications (comma separated)</label>
+                  <textarea
+                    value={jobForm.qualifications}
+                    onChange={(e) => setJobForm({...jobForm, qualifications: e.target.value})}
+                    className="form-input"
+                    placeholder="JavaScript, React, Node.js, ..."
+                    rows="2"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Skills (comma separated)</label>
+                  <textarea
+                    value={jobForm.skills}
+                    onChange={(e) => setJobForm({...jobForm, skills: e.target.value})}
+                    className="form-input"
+                    placeholder="Communication, Teamwork, Problem-solving, ..."
+                    rows="2"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">Application Deadline</label>
+                  <input
+                    type="date"
+                    value={jobForm.deadline}
+                    onChange={(e) => setJobForm({...jobForm, deadline: e.target.value})}
+                    className="form-input"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button 
+                  type="button" 
+                  className="btn btn-secondary"
+                  onClick={() => setShowJobForm(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={!jobForm.title || !jobForm.description || !jobForm.location || !jobForm.salary || !jobForm.deadline}
+                >
+                  Create Job
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Job Modal */}
+      {jobToEdit && (
+        <div className="modal-overlay">
+          <div className="modal-content large">
+            <div className="modal-header">
+              <h3>Edit Job Posting</h3>
+              <button 
+                className="close-button"
+                onClick={() => setJobToEdit(null)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateJob}>
+              <div className="form-section">
+                <h3>Job Details</h3>
+                
+                <div className="form-group">
+                  <label className="form-label required">Job Title</label>
+                  <input
+                    type="text"
+                    value={jobToEdit.title}
+                    onChange={(e) => setJobToEdit({...jobToEdit, title: e.target.value})}
+                    className="form-input"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">Job Description</label>
+                  <textarea
+                    value={jobToEdit.description}
+                    onChange={(e) => setJobToEdit({...jobToEdit, description: e.target.value})}
+                    className="form-input"
+                    rows="3"
+                    required
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label required">Location</label>
+                    <input
+                      type="text"
+                      value={jobToEdit.location}
+                      onChange={(e) => setJobToEdit({...jobToEdit, location: e.target.value})}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label required">Salary</label>
+                    <input
+                      type="text"
+                      value={jobToEdit.salary}
+                      onChange={(e) => setJobToEdit({...jobToEdit, salary: e.target.value})}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">Application Deadline</label>
+                  <input
+                    type="date"
+                    value={jobToEdit.deadline}
+                    onChange={(e) => setJobToEdit({...jobToEdit, deadline: e.target.value})}
+                    className="form-input"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button 
+                  type="button" 
+                  className="btn btn-secondary"
+                  onClick={() => setJobToEdit(null)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                >
+                  Update Job
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Application Details Modal */}
+      {showApplicationModal && selectedApplication && (
+        <div className="modal-overlay">
+          <div className="modal-content large">
+            <div className="modal-header">
+              <h3>Application Details</h3>
+              <div className="applicant-score">
+                <div className={`score-badge ${selectedApplication.score >= 70 ? 'qualified' : ''}`}>
+                  {selectedApplication.score || 0}%
+                </div>
+              </div>
+              <button 
+                className="close-button"
+                onClick={() => setShowApplicationModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-section">
+                <h3>Applicant Information</h3>
+                
+                <div className="info-grid">
+                  <div className="info-item">
+                    <label>Name</label>
+                    <div className="info-value">
+                      {selectedApplication.student?.name || 'Not available'}
+                    </div>
+                  </div>
+                  
+                  <div className="info-item">
+                    <label>Email</label>
+                    <div className="info-value">
+                      {selectedApplication.student?.email || 'Not available'}
+                    </div>
+                  </div>
+                  
+                  <div className="info-item">
+                    <label>Phone</label>
+                    <div className="info-value">
+                      {selectedApplication.student?.phone || 'Not available'}
+                    </div>
+                  </div>
+                  
+                  <div className="info-item">
+                    <label>Education Level</label>
+                    <div className="info-value">
+                      {selectedApplication.student?.educationLevel || 'Not available'}
+                    </div>
+                  </div>
+                  
+                  <div className="info-item">
+                    <label>Major</label>
+                    <div className="info-value">
+                      {selectedApplication.student?.major || 'Not available'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-section">
+                <h3>Application for: {selectedApplication.jobTitle}</h3>
                 
                 {selectedApplication.transcripts && selectedApplication.transcripts.length > 0 && (
-                  <Box mb={2}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                      Education History
-                    </Typography>
-                    <List dense>
-                      {selectedApplication.transcripts.map((transcript, index) => (
-                        <ListItem 
-                          key={index} 
-                          sx={{ 
-                            border: 1, 
-                            borderColor: 'grey.200', 
-                            borderRadius: 2, 
-                            mb: 1,
-                            bgcolor: 'white'
-                          }}
-                        >
-                          <ListItemText 
-                            primary={transcript.institution}
-                            secondary={`${transcript.educationLevel} - ${transcript.year} | GPA: ${transcript.gpa || 'N/A'}`}
-                            primaryTypographyProps={{ fontWeight: 600 }}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Box>
+                  <div className="info-section">
+                    <h4>Education History</h4>
+                    {selectedApplication.transcripts.map((transcript, index) => (
+                      <div key={index} className="info-item">
+                        <div className="info-value">
+                          <strong>{transcript.institution}</strong><br />
+                          {transcript.educationLevel} - {transcript.year} | GPA: {transcript.gpa || 'N/A'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {selectedApplication.certificates && selectedApplication.certificates.length > 0 && (
-                  <Box mb={2}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                      Certifications
-                    </Typography>
-                    <List dense>
-                      {selectedApplication.certificates.map((certificate, index) => (
-                        <ListItem 
-                          key={index} 
-                          sx={{ 
-                            border: 1, 
-                            borderColor: 'grey.200', 
-                            borderRadius: 2, 
-                            mb: 1,
-                            bgcolor: 'white'
-                          }}
-                        >
-                          <ListItemText 
-                            primary={certificate.name}
-                            secondary={`${certificate.issuingOrganization} | ${certificate.year}`}
-                            primaryTypographyProps={{ fontWeight: 600 }}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Box>
+                  <div className="info-section">
+                    <h4>Certifications</h4>
+                    {selectedApplication.certificates.map((certificate, index) => (
+                      <div key={index} className="info-item">
+                        <div className="info-value">
+                          <strong>{certificate.name}</strong><br />
+                          {certificate.issuingOrganization} | {certificate.year}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {(!selectedApplication.transcripts || selectedApplication.transcripts.length === 0) &&
                  (!selectedApplication.certificates || selectedApplication.certificates.length === 0) && (
-                  <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 2 }}>
-                    No qualifications uploaded yet
-                  </Typography>
+                  <div className="no-data">
+                    <p>No qualifications uploaded yet</p>
+                  </div>
                 )}
-              </Grid>
+              </div>
 
-              <Grid item xs={12}>
-                <Divider />
-                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 700, color: 'primary.main' }}>
-                  Application Status
-                </Typography>
-                <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="textSecondary" sx={{ width: '100%', mb: 1 }}>
-                    Current status: <strong>{selectedApplication.status}</strong>
-                  </Typography>
-                  <Chip 
-                    label="Pending" 
+              <div className="form-section">
+                <h3>Application Status</h3>
+                <p>Current status: <strong>{selectedApplication.status}</strong></p>
+                
+                <div className="action-buttons">
+                  <button 
+                    className={`btn ${selectedApplication.status === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'pending')}
-                    color={selectedApplication.status === 'pending' ? 'primary' : 'default'}
-                    variant={selectedApplication.status === 'pending' ? 'filled' : 'outlined'}
-                  />
-                  <Chip 
-                    label="Interview" 
+                  >
+                    Pending
+                  </button>
+                  <button 
+                    className={`btn ${selectedApplication.status === 'interview' ? 'btn-warning' : 'btn-secondary'}`}
                     onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'interview')}
-                    color={selectedApplication.status === 'interview' ? 'warning' : 'default'}
-                    variant={selectedApplication.status === 'interview' ? 'filled' : 'outlined'}
-                  />
-                  <Chip 
-                    label="Approved" 
+                  >
+                    Interview
+                  </button>
+                  <button 
+                    className={`btn ${selectedApplication.status === 'approved' ? 'btn-success' : 'btn-secondary'}`}
                     onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'approved')}
-                    color={selectedApplication.status === 'approved' ? 'success' : 'default'}
-                    variant={selectedApplication.status === 'approved' ? 'filled' : 'outlined'}
-                  />
-                  <Chip 
-                    label="Rejected" 
+                  >
+                    Approved
+                  </button>
+                  <button 
+                    className={`btn ${selectedApplication.status === 'rejected' ? 'btn-danger' : 'btn-secondary'}`}
                     onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'rejected')}
-                    color={selectedApplication.status === 'rejected' ? 'error' : 'default'}
-                    variant={selectedApplication.status === 'rejected' ? 'filled' : 'outlined'}
-                  />
-                  <Chip 
-                    label="Hired" 
+                  >
+                    Rejected
+                  </button>
+                  <button 
+                    className={`btn ${selectedApplication.status === 'hired' ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => handleUpdateApplicationStatus(selectedApplication.id, 'hired')}
-                    color={selectedApplication.status === 'hired' ? 'primary' : 'default'}
-                    variant={selectedApplication.status === 'hired' ? 'filled' : 'outlined'}
-                  />
-                </Box>
-              </Grid>
-            </Grid>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button 
-            onClick={handleCloseViewApplication}
-            sx={{ borderRadius: 1 }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+                  >
+                    Hired
+                  </button>
+                </div>
+              </div>
+            </div>
 
-      {/* Notifications */}
-      <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseSnackbar}>
-        <Alert 
-          onClose={handleCloseSnackbar} 
-          severity="error" 
-          sx={{ 
-            width: '100%',
-            borderRadius: 2,
-            fontWeight: 500,
-          }}
-        >
-          {error}
-        </Alert>
-      </Snackbar>
-
-      <Snackbar open={!!success} autoHideDuration={4000} onClose={handleCloseSnackbar}>
-        <Alert 
-          onClose={handleCloseSnackbar} 
-          severity="success" 
-          sx={{ 
-            width: '100%',
-            borderRadius: 2,
-            fontWeight: 500,
-          }}
-        >
-          {success}
-        </Alert>
-      </Snackbar>
-    </Box>
+            <div className="form-actions">
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowApplicationModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
