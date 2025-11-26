@@ -5,6 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 // Use relative path for same-domain deployment, or absolute for cross-domain
 const API_BASE_URL = window.location.hostname === 'group-assignment-94en.onrender.com' 
   ? 'https://group-assignment-94en.onrender.com/api'
+  : window.location.hostname === 'group-assignment-1-lcme.onrender.com'
+  ? 'https://group-assignment-94en.onrender.com/api' // Your backend is on this domain
   : '/api';
 
 const Register = ({ onLogin }) => {
@@ -144,15 +146,25 @@ const Register = ({ onLogin }) => {
         body: JSON.stringify(registerData),
       });
 
-      // Handle non-JSON responses
-      const contentType = response.headers.get('content-type');
+      // Enhanced response handling
       let result;
+      const contentType = response.headers.get('content-type');
       
       if (contentType && contentType.includes('application/json')) {
         result = await response.json();
       } else {
-        const text = await response.text();
-        throw new Error(`Server returned non-JSON response: ${text}`);
+        // If not JSON, try to read as text to see what we got
+        const textResponse = await response.text();
+        console.error('❌ Non-JSON response received:', textResponse);
+        
+        // Check if it's an HTML error page
+        if (textResponse.includes('<!DOCTYPE html>') || textResponse.includes('<html>')) {
+          throw new Error('Server returned HTML instead of JSON. This might be a routing issue.');
+        } else if (textResponse.trim() === '') {
+          throw new Error('Server returned empty response. Check if the endpoint exists.');
+        } else {
+          throw new Error(`Server returned non-JSON response: ${textResponse.substring(0, 100)}...`);
+        }
       }
 
       console.log('📨 Registration response:', result);
@@ -194,11 +206,15 @@ const Register = ({ onLogin }) => {
       if (error.message.includes('User already exists')) {
         errorMessage = 'An account with this email already exists. Please try logging in.';
       } else if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
-        errorMessage = 'Cannot connect to server due to CORS policy. Please try again or contact support.';
+        errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
       } else if (error.message.includes('Invalid email')) {
         errorMessage = 'Invalid email address.';
       } else if (error.message.includes('is required')) {
         errorMessage = error.message;
+      } else if (error.message.includes('HTML instead of JSON')) {
+        errorMessage = 'Server configuration error. Please contact support.';
+      } else if (error.message.includes('empty response')) {
+        errorMessage = 'Server is not responding properly. Please try again later.';
       } else {
         errorMessage = error.message;
       }
@@ -228,7 +244,7 @@ const Register = ({ onLogin }) => {
       alert(`✅ Server is running!\nMessage: ${result.message}\nDatabase: ${result.firebase}\nURL: ${API_BASE_URL}`);
     } catch (error) {
       console.error('Connection test failed:', error);
-      alert(`❌ Cannot connect to server:\n${error.message}\n\nThis is likely a CORS issue. Please ensure the backend allows requests from this domain.`);
+      alert(`❌ Cannot connect to server:\n${error.message}\n\nAPI URL: ${API_BASE_URL}\n\nThis might be a CORS or network issue.`);
     }
   };
 
@@ -254,10 +270,10 @@ const Register = ({ onLogin }) => {
               <strong>Error:</strong> {error}
               <div style={{ marginTop: '10px', fontSize: '14px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
                 <div><strong>Frontend:</strong> {window.location.origin}</div>
-                <div><strong>Backend:</strong> {API_BASE_URL}</div>
+                <div><strong>Backend API:</strong> {API_BASE_URL}</div>
                 <div style={{ marginTop: '5px', color: '#dc3545' }}>
                   <small>
-                    CORS Issue: The backend needs to allow requests from {window.location.origin}
+                    Current URL: {window.location.href}
                   </small>
                 </div>
               </div>
@@ -588,6 +604,9 @@ const Register = ({ onLogin }) => {
               </div>
               <div>
                 <strong>Backend API:</strong> {API_BASE_URL}
+              </div>
+              <div>
+                <strong>Current Path:</strong> {window.location.pathname}
               </div>
             </div>
           </div>
