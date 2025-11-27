@@ -224,14 +224,22 @@ const InstituteDashboard = ({ user: propUser }) => {
     setMessage('');
 
     try {
+      // Validate all required fields
+      if (!courseForm.name || !courseForm.description || !courseForm.facultyId || 
+          !courseForm.requirements || !courseForm.duration || !courseForm.seats) {
+        throw new Error('All course fields are required');
+      }
+
       const coursePayload = cleanFormData({
         name: courseForm.name,
         description: courseForm.description,
         facultyId: courseForm.facultyId,
         requirements: courseForm.requirements,
         duration: courseForm.duration,
-        totalSeats: parseInt(courseForm.seats)
+        seats: parseInt(courseForm.seats)
       });
+
+      console.log('Sending course data:', coursePayload);
 
       await apiCall('/institution/courses', {
         method: 'POST',
@@ -968,7 +976,7 @@ const InstituteDashboard = ({ user: propUser }) => {
                 <button 
                   type="submit" 
                   className="btn btn-primary"
-                  disabled={loading}
+                  disabled={loading || !courseForm.name || !courseForm.description || !courseForm.facultyId || !courseForm.requirements || !courseForm.duration || !courseForm.seats}
                 >
                   {loading ? '🔄 Adding...' : '➕ Add Course'}
                 </button>

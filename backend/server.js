@@ -2223,26 +2223,72 @@ app.get('/api/institution/courses', authenticateToken, requireRole(['institution
   }
 });
 
-// Add course
+// Add course - FIXED VERSION
 app.post('/api/institution/courses', authenticateToken, requireRole(['institution']), async (req, res) => {
   try {
     const { name, description, facultyId, requirements, duration, seats } = req.body;
 
-    console.log('📝 Adding course for institution:', req.user.id, { name, facultyId });
+    console.log('📝 Adding course for institution:', req.user.id, { 
+      name, 
+      facultyId,
+      description: description ? 'Provided' : 'Missing',
+      requirements: requirements ? 'Provided' : 'Missing',
+      duration: duration ? 'Provided' : 'Missing',
+      seats: seats ? 'Provided' : 'Missing'
+    });
 
-    if (!name || !description || !facultyId || !requirements || !duration || !seats) {
+    // Enhanced validation with better error messages
+    if (!name) {
       return res.status(400).json({ 
         success: false, 
-        error: 'All course fields are required' 
+        error: 'Course name is required' 
+      });
+    }
+    if (!description) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Course description is required' 
+      });
+    }
+    if (!facultyId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Faculty selection is required' 
+      });
+    }
+    if (!requirements) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Course requirements are required' 
+      });
+    }
+    if (!duration) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Course duration is required' 
+      });
+    }
+    if (!seats) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Total seats are required' 
       });
     }
 
     // Verify faculty exists and belongs to institution
     const facultyDoc = await db.collection('faculties').doc(facultyId).get();
-    if (!facultyDoc.exists || facultyDoc.data().institutionId !== req.user.id) {
+    if (!facultyDoc.exists) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Invalid faculty selected' 
+        error: 'Selected faculty not found' 
+      });
+    }
+    
+    const facultyData = facultyDoc.data();
+    if (facultyData.institutionId !== req.user.id) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Selected faculty does not belong to your institution' 
       });
     }
 
@@ -2258,16 +2304,19 @@ app.post('/api/institution/courses', authenticateToken, requireRole(['institutio
       availableSeats: parseInt(seats),
       totalSeats: parseInt(seats),
       status: 'active',
-      createdAt: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
 
+    console.log('📦 Creating course with data:', courseData);
     await courseRef.set(courseData);
 
     // Add course to institution
     const institutionDoc = await db.collection('institution').doc(req.user.id).get();
     const institutionData = institutionDoc.data();
     await db.collection('institution').doc(req.user.id).update({
-      courses: [...(institutionData.courses || []), courseRef.id]
+      courses: [...(institutionData.courses || []), courseRef.id],
+      updatedAt: new Date()
     });
 
     console.log('✅ Course added successfully:', courseRef.id);
@@ -2280,7 +2329,10 @@ app.post('/api/institution/courses', authenticateToken, requireRole(['institutio
     });
   } catch (error) {
     console.error('❌ Error adding course:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Internal server error while adding course' 
+    });
   }
 });
 
